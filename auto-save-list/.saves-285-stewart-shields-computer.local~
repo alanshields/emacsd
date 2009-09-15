@@ -1,0 +1,102 @@
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/State.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#State.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ScenarioData.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#ScenarioData.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/DetailPane.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#DetailPane.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/HealMark.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#HealMark.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/PlayerMark.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#PlayerMark.java#
+/Users/sshields/code/java/wowreplay/TODO
+/Users/sshields/code/java/wowreplay/#TODO#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/LogPane.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#LogPane.java#
+/Users/sshields/code/java/wowreplay/Makefile
+/Users/sshields/code/java/wowreplay/#Makefile#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/Main.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#Main.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/DeathEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#DeathEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/HealEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#HealEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/DamageEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#DamageEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/WowEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#WowEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/EventFilter.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#EventFilter.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/HealthEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#HealthEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/Player.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#Player.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/StatInfo.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#StatInfo.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/Sandbox.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#Sandbox.java#
+/Users/sshields/code/java/wowreplay/.gitignore
+/Users/sshields/code/java/wowreplay/#.gitignore#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/DTPSMark.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#DTPSMark.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/ScreenSpike.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#ScreenSpike.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/PlayerPairTest.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#PlayerPairTest.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/PlayerPair.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#PlayerPair.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/PlayerTest.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#PlayerTest.java#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/SpringDemo3Project/src/layout/SpringDemo3.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/SpringDemo3Project/src/layout/#SpringDemo3.java#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/SpringDemo4Project/src/layout/SpringDemo4.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/SpringDemo4Project/src/layout/#SpringDemo4.java#
+/Users/sshields/code/java/wowreplay/Samples/Ulduar10.lua
+/Users/sshields/code/java/wowreplay/Samples/#Ulduar10.lua#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/MapEvent.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#MapEvent.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/EventNexus.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#EventNexus.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/Main.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#Main.java#
+/Users/sshields/code/lua/blackbox/blackbox.luam
+/Users/sshields/code/lua/blackbox/#blackbox.luam#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/MapPoint.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#MapPoint.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ScreenPoint.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#ScreenPoint.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/SetCenterPositionListener.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/ui/#SetCenterPositionListener.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/BlackboxData.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#BlackboxData.java#
+/Users/sshields/code/java/wowreplay/Samples/25.lua
+/Users/sshields/code/java/wowreplay/Samples/#25.lua#
+/Users/sshields/Documents/resume2009retail.tex
+/Users/sshields/Documents/#resume2009retail.tex#
+/Users/sshields/texmf/res.cls
+/Users/sshields/texmf/#res.cls#
+/Users/sshields/Documents/resume2009python.tex
+/Users/sshields/Documents/#resume2009python.tex#
+/Users/sshields/code/java/wowreplay/Samples/new.lua
+/Users/sshields/code/java/wowreplay/Samples/#new.lua#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/UtilTest.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#UtilTest.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/Util.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#Util.java#
+/Users/sshields/code/lua/blackbox/blackbox.lua
+/Users/sshields/code/lua/blackbox/#blackbox.lua#
+/Users/sshields/code/lua/blackbox/libs/Astrolabe/Astrolabe.lua
+/Users/sshields/code/lua/blackbox/libs/Astrolabe/#Astrolabe.lua#
+/Users/sshields/code/lua/blackbox/contract.h
+/Users/sshields/code/lua/blackbox/#contract.h#
+/Users/sshields/code/java/wowreplay/Samples/second.lua
+/Users/sshields/code/java/wowreplay/Samples/#second.lua#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/components/LayeredPaneDemoProject/src/components/LayeredPaneDemo.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/components/LayeredPaneDemoProject/src/components/#LayeredPaneDemo.java#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/components/TreeDemoProject/src/components/TreeDemo.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/components/TreeDemoProject/src/components/#TreeDemo.java#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/BoxLayoutDemoProject/src/layout/BoxLayoutDemo.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/layout/BoxLayoutDemoProject/src/layout/#BoxLayoutDemo.java#
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/events/BeeperProject/src/events/Beeper.java
+/Users/sshields/Desktop/Java Documentation/tutorial/uiswing/examples/events/BeeperProject/src/events/#Beeper.java#
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/MalformedInputException.java
+/Users/sshields/code/java/wowreplay/org/poorimpulsecontrol/wowreplay/#MalformedInputException.java#
