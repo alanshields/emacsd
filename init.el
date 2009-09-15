@@ -194,3 +194,7 @@
 
 (put 'narrow-to-region 'disabled nil)
 
+
+;; Steelhead specific configurations
+(when (file-exists-p "~/steelhead")
+  (load "steelhead.el"))
