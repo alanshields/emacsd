@@ -9,20 +9,22 @@
     (tool-bar-mode 0))
 
 (add-to-list 'load-path "~/.emacs.d")
-(add-to-list 'load-path "~/.emacs.d/emacs-rails")
-(require 'rails)
+;(add-to-list 'load-path "~/.emacs.d/emacs-rails")
+;(require 'rails)
 
 ;; SLIME
-(setq load-path (cons "/opt/local/share/emacs/site-lisp/slime" load-path))
-(require 'slime-autoloads)
-(setq slime-lisp-implementations
-     `((sbcl ("/opt/local/bin/sbcl"))
-       (clisp ("/opt/local/bin/clisp"))))
-(add-hook 'lisp-mode-hook
-           (lambda ()
-             (cond ((not (featurep 'slime))
-                    (require 'slime) 
-                    (normal-mode)))))
+(let ((slime-dir "/opt/local/share/emacs/site-lisp/slime"))
+  (when (file-exists-p slime-dir)
+    (setq load-path (cons slime-dir load-path))
+    (require 'slime-autoloads)
+    (setq slime-lisp-implementations
+	  `((sbcl ("/opt/local/bin/sbcl"))
+	    (clisp ("/opt/local/bin/clisp"))))
+    (add-hook 'lisp-mode-hook
+	      (lambda ()
+		(cond ((not (featurep 'slime))
+		       (require 'slime) 
+		       (normal-mode)))))))
 
 (eval-after-load "slime"
    '(slime-setup '(slime-fancy slime-banner)))
@@ -62,67 +64,13 @@
 (put 'narrow-to-page 'disabled nil)
 
 ;; rhtml
-(require 'mmm-mode)
-(require 'mmm-auto)
-(setq mmm-global-mode 'maybe)
-(setq mmm-submode-decoration-level 2)
-;;(set-face-background 'mmm-output-submode-face  "DarkSlateBlue")
-;;(set-face-background 'mmm-code-submode-face    "DarkSlateBlue")
-;;(set-face-background 'mmm-comment-submode-face "DarkOliveGreen")
-(mmm-add-classes
- '((erb-code
-    :submode ruby-mode
-    :match-face (("<%#" . mmm-comment-submode-face)
-                 ("<%=" . mmm-output-submode-face)
-                 ("<%"  . mmm-code-submode-face))
-    :front "<%[#=]?"
-    :back "%>"
-    :insert ((?% erb-code       nil @ "<%"  @ " " _ " " @ "%>" @)
-             (?# erb-comment    nil @ "<%#" @ " " _ " " @ "%>" @)
-             (?= erb-expression nil @ "<%=" @ " " _ " " @ "%>" @))
-    )))
-(add-hook 'html-mode-hook
-          (lambda ()
-            (setq mmm-classes '(erb-code))
-            (mmm-mode-on)))
-(add-hook 'ruby-mode-hook
-          (lambda ()
-            (ruby-electric-mode nil)))
+(when (and (locate-library "mmm-mode")
+	   (locate-library "mmm-settings"))
+  (require "mmm-settings"))
 
 (add-to-list 'auto-mode-alist '("\\.rhtml$" . html-mode))
-(global-set-key [f8] 'mmm-parse-buffer)
-
-(mmm-add-classes
- '((my-django-expr
-    :submode python-mode
-    :face mmm-declaration-submode-face
-    :front "{%"
-    :back "%}"
-    :include-front t
-    :include-back t)))
-
-(mmm-add-classes
- '((my-django-var
-    :submode python
-    :face mmm-output-submode-face
-    :front "{{"
-    :back "}}"
-    :include-front t
-    :include-back t)))
-
-(mmm-add-classes
-'((my-html-here-doc
-   :submode html-mode
-   :face mmm-output-submode-face
-   :front "<<\"---html---\""
-   :back "---html---"
-   :include-front nil
-   :include-back nil)))
-(mmm-add-mode-ext-class nil ".*\\.pl" 'my-html-here-doc)
 
 (add-to-list 'auto-mode-alist '("templates/.*\\.html$" . html-mode))
-(mmm-add-mode-ext-class nil "templates/.*\\.html$" 'my-django-var)
-(mmm-add-mode-ext-class nil "templates/.*\\.html$" 'my-django-expr)
 
 ;; eshell stuff
 (defun eshell-maybe-bol ()
@@ -135,10 +83,10 @@
           '(lambda () (define-key eshell-mode-map "\C-a" 'eshell-maybe-bol)))
 
 ;; Tuareg caMeL mode
-(add-to-list 'load-path "~/.emacs.d/tuareg/")
-(setq auto-mode-alist (cons '("\\.ml\\w?" . tuareg-mode) auto-mode-alist))
-(autoload 'tuareg-mode "tuareg" "Major mode for editing Caml code" t)
-(autoload 'camldebug "camldebug" "Run the Caml debugger" t)
+;; (add-to-list 'load-path "~/.emacs.d/tuareg/")
+;; (setq auto-mode-alist (cons '("\\.ml\\w?" . tuareg-mode) auto-mode-alist))
+;; (autoload 'tuareg-mode "tuareg" "Major mode for editing Caml code" t)
+;; (autoload 'camldebug "camldebug" "Run the Caml debugger" t)
 
 (custom-set-faces
   ;; custom-set-faces was added by Custom.
@@ -155,7 +103,8 @@
 ; (set-face-background 'mmm-default-submode-face "dark slate gray")
 
 ; no menu bar. Werd.
-(menu-bar-mode nil)
+(when (not t)
+  (menu-bar-mode nil))
 
 ;; Don't mess with the clean directory unless you have to!
 (add-hook 'before-save-hook
@@ -181,6 +130,7 @@
  '(indent-tabs-mode nil)
  '(inhibit-startup-screen t)
  '(js2-basic-offset 4)
+ '(ns-command-modifier (quote meta))
  '(rails-use-indent-and-complete nil)
  '(safe-local-variable-values (quote ((lua-indent-level . 4))))
  '(sentence-end-double-space nil)
@@ -190,17 +140,16 @@
 
 
 ;; Gnus!
-(add-to-list 'load-path (expand-file-name "~/.emacs.d/gnus/lisp/"))
-(require 'gnus-load)
-
-(require 'info)
-(add-to-list 'Info-default-directory-list (expand-file-name "~/.emacs.d/gnus/texi"))
+;; (add-to-list 'load-path (expand-file-name "~/.emacs.d/gnus/lisp/"))
+;; (require 'gnus-load)
+;; (require 'info)
+;; (add-to-list 'Info-default-directory-list (expand-file-name "~/.emacs.d/gnus/texi"))
 
 ;; bbdb
-(add-to-list 'load-path "~/.emacs.d/bbdb-2.35/lisp/")
-(require 'bbdb)
-(bbdb-initialize 'gnus)
-(add-hook 'gnus-startup-hook 'bbdb-insinuate-gnus)
+;; (add-to-list 'load-path "~/.emacs.d/bbdb-2.35/lisp/")
+;; (require 'bbdb)
+;; (bbdb-initialize 'gnus)
+;; (add-hook 'gnus-startup-hook 'bbdb-insinuate-gnus)
 
 ;; JSlint
 ;; (require 'javascript-mode)
@@ -229,3 +178,5 @@
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
 
 (put 'narrow-to-region 'disabled nil)
+
+
