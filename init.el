@@ -180,12 +180,14 @@
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
 (add-hook 'org-mode-hook
           (lambda ()
-            (require 'my-org-mode)))
+            (when (not (featurep 'my-org-mode))
+              (require 'my-org-mode)
+              (when (file-exists-p "~/Documents/sas_timelog")
+                (add-to-list 'org-agenda-files "~/Documents/sas_timelog"))
+              (org-mode))))
 (global-set-key "\C-cl" 'org-store-link)
 (global-set-key "\C-ca" 'org-agenda)
 (global-set-key "\C-cb" 'org-iswitchb)
-(when (file-exists-p "~/Documents/sas_timelog")
-  (add-to-list 'org-agenda-files "~/Documents/sas_timelog"))
 
 ;; PHP mode
 (autoload 'php-mode "php-mode-improved.el")

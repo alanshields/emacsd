@@ -5,4 +5,6 @@
                                  (arglist-cont-nonempty)
                                  (defun . (before)))))
 (add-hook 'php-mode-hook
-          (steelhead-php-style))
+          #'steelhead-php-style)
+
+(find-file "~/Documents/sas_timelog")
