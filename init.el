@@ -189,6 +189,7 @@
 
 ;; PHP mode
 (autoload 'php-mode "php-mode-improved.el")
+(load "nxhtml/autostart.el")
 (add-to-list 'auto-mode-alist '("\\.php$" . php-mode))
 
 (put 'narrow-to-region 'disabled nil)
