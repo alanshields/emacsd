@@ -1,9 +1,17 @@
 ;; php mode hook
 (defun steelhead-php-style ()
+  (interactive)
+  ; Steelhead uses javadoc comments like so:
+  ; /*
+  ; * something here
+  ; */
   (add-to-list 'c-offsets-alist '(c . c-lineup-comment))
-  (setq c-hanging-braces-alist '((substatement-open before after)
-                                 (arglist-cont-nonempty)
-                                 (defun . (before)))))
+  ; Steelhead uses tabs, not spaces.
+  (setq indent-tabs-mode t)
+  ; Steelhead uses 4 space indentation
+  (setq c-basic-offset 4)
+  (setq tab-width 4))
+
 (add-hook 'php-mode-hook
           #'steelhead-php-style)
 
