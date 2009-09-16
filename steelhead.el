@@ -15,4 +15,9 @@
 (add-hook 'php-mode-hook
           #'steelhead-php-style)
 
+(require 'remember)
+(org-remember-insinuate)
+(setq org-default-notes-file "~/Documents/sas_timelog")
+(define-key global-map (kbd "C-c r") 'org-remember)
+
 (find-file "~/Documents/sas_timelog")
