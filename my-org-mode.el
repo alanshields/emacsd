@@ -6,6 +6,6 @@
                     'org-mac-message-insert-selected)))
 
 (setq org-todo-keywords
-      '((sequence "TODO(t!)" "INPROGRESS(p!)" "WAIT(w@/!)" "FIXME(f)" "FUTURE(u@!)" "|" "DONE(d@/!)" "CANCELED(c@)")))
+      '((sequence "TODO(t!)" "INPROGRESS(p!)" "WAIT(w@/!)" "FIXME(f)" "FUTURE(u@!)" "|" "DONE(d@/!)" "CANCELED(c@!)")))
 
 (provide 'my-org-mode)
