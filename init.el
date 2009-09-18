@@ -190,8 +190,9 @@
 (global-set-key "\C-cb" 'org-iswitchb)
 
 ;; PHP mode
-(autoload 'php-mode "php-mode-improved.el")
 (load "nxhtml/autostart.el")
+; nXhtml has branched off significantly from this by now.
+;(load "php-mode-improved.el")
 (add-to-list 'auto-mode-alist '("\\.php$" . php-mode))
 
 (put 'narrow-to-region 'disabled nil)
