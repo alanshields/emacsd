@@ -7,15 +7,27 @@
   ; /*
   ; * something here
   ; */
-  (add-to-list 'c-offsets-alist '(c . c-lineup-comment))
-  ; Allman style (AKA bsd) - but for some reason this isn't working. Let's keep moving.
-  (c-set-style "bsd" nil)
+  ; (add-to-list 'c-offsets-alist '(c . c-lineup-comment))
+  ; Allman style (AKA bsd)
+  (c-add-style "steelhead"
+               '("bsd"
+                 (c-basic-offset . 3)
+                 (c-offsets-alist
+                  ; phpdoc comment
+                  (c . 0)
+                  ; next-line function args
+;                  (arglist-cont-nonempty . +)
+                  ))
+               t)
+               
+  ; 3 characters per tab
+  (setq tab-width 3)
 
   ; Electric parens seems to break with php-enhanced-mode
   (setq c-electric-flag nil)
   ; Mumamo on
-  (nxhtml-mumamo-mode))
- 
+  ; (nxhtml-mumamo-mode)
+  )
 
 (add-hook 'php-mode-hook
           #'steelhead-php-style)
