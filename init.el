@@ -3,6 +3,10 @@
 ;(add-to-list 'default-frame-alist '(background-color . "black"))
 ;(add-to-list 'default-frame-alist '(font . "-bitstream-bitstream vera sans mono-medium-r-normal--14-103-98-98-c-84-iso8859-1"))
 
+;; To byte-compile .emacs.d, run this command:
+(defun my-byte-compile-initd ()
+  (byte-recompile-directory "~/.emacs.d" 0))
+
 (dynamic-completion-mode)
 
 (if (boundp tool-bar-mode)
