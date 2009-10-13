@@ -60,8 +60,8 @@
 
 
 ;; Tag tables
-(setq tags-table-list
-      '("~/Documents/identity/dev-FOAD-1.0"))
+;;(setq tags-table-list
+;;      '("~/Documents/identity/dev-FOAD-1.0"))
 
 
 
