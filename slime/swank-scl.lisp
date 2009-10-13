@@ -100,19 +100,17 @@
    (index :initarg :index :initform 0 :type fixnum)
    (position :initarg :position :initform 0 :type integer)
    (interactive :initarg :interactive :initform nil :type (member nil t))
-   (output-stream :initarg :output-stream :initform nil)
    (input-fn :initarg :input-fn :type function)
    ))
 
-(defun make-slime-input-stream (input-fn &optional output-stream)
+(defun make-slime-input-stream (input-fn)
   (declare (function input-fn))
   (make-instance 'slime-input-stream
                  :in-buffer (make-string 256)
                  :in-head 0 :in-tail 0
                  :out-buffer ""
                  :buffer "" :index 0
-                 :input-fn input-fn
-                 :output-stream output-stream))
+                 :input-fn input-fn))
 
 (defmethod print-object ((s slime-input-stream) stream)
   (print-unreadable-object (s stream :type t)))
@@ -202,11 +200,8 @@
            (incf (slot-value stream 'position) copy)
 	   copy)
 	  (waitp
-           (let ((output-stream (slot-value stream 'output-stream))
-                 (input-fn (slot-value stream 'input-fn)))
+           (let ((input-fn (slot-value stream 'input-fn)))
              (declare (type function input-fn))
-             (when output-stream
-               (force-output output-stream))
              (let ((new-input (funcall input-fn)))
                (cond ((zerop (length new-input))
                       -1)
@@ -222,6 +217,9 @@
 
 (defclass slime-output-stream (ext:character-output-stream)
   ((output-fn :initarg :output-fn :type function)
+   (output-buffer :initarg :output-buffer :type simple-string)
+   (buffer-tail :initarg :buffer-tail :initform 0 :type kernel:index)
+   (last-write :initarg :last-write)
    (column :initform 0 :type kernel:index)
    (interactive :initform nil :type (member nil t))
    (position :initform 0 :type integer)))
@@ -230,8 +228,11 @@
   (declare (function output-fn))
   (make-instance 'slime-output-stream
 		 :in-buffer ""
-		 :out-buffer (make-string 256)
-                 :output-fn output-fn))
+		 :out-buffer ""
+		 :output-buffer (make-string 256)
+                 :output-fn output-fn
+                 :last-write (get-internal-real-time)
+                 ))
   
 (defmethod print-object ((s slime-output-stream) stream)
   (print-unreadable-object (s stream :type t)))
@@ -246,18 +247,31 @@
     (unless abort
       (finish-output stream))
     (setf (ext:stream-open-p stream) nil)
-    (setf (ext:stream-out-buffer stream) " ")
+    (setf (slot-value stream 'output-buffer) "")
     t))
 
 ;;; No 'stream-clear-input method.
 
 (defmethod ext:stream-finish-output ((stream slime-output-stream))
+  (let ((buffer-tail (slot-value stream 'buffer-tail)))
+    (declare (type kernel:index buffer-tail))
+    (when (> buffer-tail 0)
+      (let ((output-fn (slot-value stream 'output-fn))
+            (output-buffer (slot-value stream 'output-buffer)))
+        (declare (function output-fn)
+                 (simple-string output-buffer))
+        (funcall output-fn (subseq output-buffer 0 buffer-tail))
+        (setf (slot-value stream 'buffer-tail) 0))
+      (setf (slot-value stream 'last-write) (get-internal-real-time))))
   nil)
 
 (defmethod ext:stream-force-output ((stream slime-output-stream))
+  (ext:stream-finish-output stream)
   nil)
 
 (defmethod ext:stream-clear-output ((stream slime-output-stream))
+  (decf (slot-value stream 'position) (slot-value stream 'buffer-tail))
+  (setf (slot-value stream 'buffer-tail) 0)
   nil)
 
 ;;; Use default 'stream-element-type method for 'character-stream which
@@ -285,12 +299,14 @@
 	   (cond ((= target-position current-position)
                   t)
                  ((> target-position current-position)
+                  (ext:stream-finish-output stream)
                   (let ((output-fn (slot-value stream 'output-fn))
                         (fill-size (- target-position current-position)))
                     (declare (function output-fn))
                     (funcall output-fn (make-string fill-size
                                                     :initial-element #\space))
                     (setf (slot-value stream 'position) target-position))
+                  (setf (slot-value stream 'last-write) (get-internal-real-time))
                   t)
                  (t
                   nil))))
@@ -302,12 +318,58 @@
 
 ;;; Use the default 'character-output-stream 'file-string-length method.
 
-;;; stream-write-chars
+;;; stream-write-char -- internal
 ;;;
-;;; The stream out-buffer is typically large enough that there is little point
-;;; growing the stream output 'string large than the total size.  For typical
-;;; usage this reduces consing.  As the string grows larger then grow to
-;;; reduce the cost of copying strings around.
+(defmethod ext:stream-write-char ((stream slime-output-stream) character)
+  (declare (type character character)
+	   (optimize (speed 3)))
+  (unless (ext:stream-open-p stream)
+    (error 'kernel:simple-stream-error
+	   :stream stream
+	   :format-control "Stream closed."))
+  ;;
+  ;; Fill the output buffer.
+  (let* ((buffer-tail (slot-value stream 'buffer-tail))
+         (output-buffer (slot-value stream 'output-buffer))
+         (buffer-length (length output-buffer)))
+    (declare (type kernel:index buffer-tail)
+             (simple-string output-buffer))
+    (when (>= buffer-tail buffer-length)
+      ;; Flush the output buffer to make room.
+      (let ((output-fn (slot-value stream 'output-fn)))
+        (declare (function output-fn))
+        (funcall output-fn output-buffer)
+        (setf buffer-tail 0)
+        (setf (slot-value stream 'last-write) (get-internal-real-time))))
+    (setf (aref output-buffer buffer-tail) character)
+    (incf buffer-tail)
+    (setf (slot-value stream 'buffer-tail) buffer-tail)
+    ;;
+    (let ((newline (char= character #\newline)))
+      (when (or newline
+                (let ((last-write (slot-value stream 'last-write)))
+                  (declare (type integer last-write))
+                  (> (get-internal-real-time)
+                     (+ last-write (* 5 internal-time-units-per-second)))))
+        ;; Flush the output buffer.
+        (let ((output-fn (slot-value stream 'output-fn)))
+          (declare (function output-fn))
+          (funcall output-fn (subseq output-buffer 0 buffer-tail))
+          (setf buffer-tail 0)
+          (setf (slot-value stream 'buffer-tail) buffer-tail)
+          (setf (slot-value stream 'last-write) (get-internal-real-time))))
+      ;;
+      (setf (slot-value stream 'column)
+	    (if newline
+		0
+		(let ((line-column (slot-value stream 'column)))
+		  (declare (type kernel:index line-column))
+		  (+ line-column 1))))
+      (incf (slot-value stream 'position))
+      ))
+  character)
+
+;;; stream-write-chars
 ;;;
 (defmethod ext:stream-write-chars ((stream slime-output-stream)
                                    string start end waitp)
@@ -339,20 +401,17 @@
                   (- end last-newline 1)
                   (let ((column (slot-value stream 'column)))
                     (declare (type kernel:index column))
-                    (+ column (- end start))))))))
+                    (+ column (- end start))))))
+      (incf (slot-value stream 'position) length)))
   (- end start))
 
 ;;;
 
-(defimplementation make-fn-streams (input-fn output-fn)
-  (let* ((output (make-slime-output-stream output-fn))
-         (input  (make-slime-input-stream input-fn output)))
-    (values input output)))
+(defimplementation make-output-stream (output-fn)
+  (make-slime-output-stream output-fn))
 
-(defimplementation make-stream-interactive (stream)
-  (when (or (typep stream 'slime-input-stream)
-            (typep stream 'slime-output-stream))
-    (setf (slot-value stream 'interactive) t)))
+(defimplementation make-input-stream (input-fn)
+  (make-slime-input-stream input-fn))
 
 
 ;;;; Compilation Commands
@@ -379,20 +438,26 @@
                    (c::warning        #'handle-notification-condition))
       (funcall function))))
 
-(defimplementation swank-compile-file (filename load-p external-format)
+(defimplementation swank-compile-file (input-file output-file 
+                                       load-p external-format)
   (with-compilation-hooks ()
     (let ((*buffer-name* nil)
           (ext:*ignore-extra-close-parentheses* nil))
       (multiple-value-bind (output-file warnings-p failure-p)
-          (compile-file filename :external-format external-format)
-        (unless failure-p
-          ;; Cache the latest source file for definition-finding.
-          (source-cache-get filename (file-write-date filename))
-          (when load-p (load output-file)))
-        (values output-file warnings-p failure-p)))))
+          (compile-file input-file 
+                        :output-file output-file
+                        :external-format external-format)
+        (values output-file warnings-p
+                (or failure-p
+                    (when load-p
+                      ;; Cache the latest source file for definition-finding.
+                      (source-cache-get input-file 
+                                        (file-write-date input-file))
+                      (not (load output-file)))))))))
 
-(defimplementation swank-compile-string (string &key buffer position directory)
-  (declare (ignore directory))
+(defimplementation swank-compile-string (string &key buffer position filename
+                                                policy)
+  (declare (ignore filename policy))
   (with-compilation-hooks ()
     (let ((*buffer-name* buffer)
           (*buffer-start-position* position)
@@ -423,8 +488,8 @@
            'compiler-condition
            :original-condition condition
            :severity (severity-for-emacs condition)
-           :short-message (brief-compiler-message-for-emacs condition)
-           :message (long-compiler-message-for-emacs condition context)
+           :message (brief-compiler-message-for-emacs condition)
+           :source-context (compiler-error-context context)
            :location (if (read-error-p condition)
                          (read-error-location condition)
                          (compiler-note-location context)))))
@@ -447,15 +512,16 @@
   the error-context redundant."
   (princ-to-string condition))
 
-(defun long-compiler-message-for-emacs (condition error-context)
+(defun compiler-error-context (error-context)
   "Describe a compiler error for Emacs including context information."
   (declare (type (or c::compiler-error-context null) error-context))
   (multiple-value-bind (enclosing source)
       (if error-context
           (values (c::compiler-error-context-enclosing-source error-context)
                   (c::compiler-error-context-source error-context)))
-    (format nil "~@[--> ~{~<~%--> ~1:;~A~> ~}~%~]~@[~{==>~%~A~^~%~}~]~A"
-            enclosing source condition)))
+    (if (and enclosing source)
+        (format nil "~@[--> ~{~<~%--> ~1:;~A~> ~}~%~]~@[~{==>~%~A~^~%~}~]"
+                enclosing source))))
 
 (defun read-error-location (condition)
   (let* ((finfo (car (c::source-info-current-file c::*source-info*)))
@@ -463,7 +529,7 @@
          (pos (c::compiler-read-error-position condition)))
     (cond ((and (eq file :stream) *buffer-name*)
            (make-location (list :buffer *buffer-name*)
-                          (list :position (+ *buffer-start-position* pos))))
+                          (list :offset *buffer-start-position* pos)))
           ((and (pathnamep file) (not *buffer-name*))
            (make-location (list :file (unix-truename file))
                           (list :position (1+ pos))))
@@ -488,17 +554,15 @@
 (defun locate-compiler-note (file source source-path)
   (cond ((and (eq file :stream) *buffer-name*)
          ;; Compiling from a buffer
-         (let ((position (+ *buffer-start-position*
-                            (source-path-string-position
-                             source-path *buffer-substring*))))
-           (make-location (list :buffer *buffer-name*)
-                          (list :position position))))
+	 (make-location (list :buffer *buffer-name*)
+			(list :offset *buffer-start-position*
+			      (source-path-string-position
+			       source-path *buffer-substring*))))
         ((and (pathnamep file) (null *buffer-name*))
          ;; Compiling from a file
          (make-location (list :file (unix-truename file))
-                        (list :position
-                              (1+ (source-path-file-position
-                                   source-path file)))))
+                        (list :position (1+ (source-path-file-position
+					     source-path file)))))
         ((and (eq file :lisp) (stringp source))
          ;; No location known, but we have the source form.
          ;; XXX How is this case triggered?  -luke (16/May/2004) 
@@ -720,7 +784,7 @@
     (with-input-from-string (s source-code)
       (make-location (list :file (unix-truename filename))
                      (list :position (1+ (code-location-stream-position
-                                          code-location s)))
+					  code-location s)))
                      `(:snippet ,(read-snippet s))))))
 
 (defun location-in-stream (code-location debug-source)
@@ -735,7 +799,7 @@
                     string)))
     (make-location
      (list :buffer (getf info :emacs-buffer))
-     (list :position (+ (getf info :emacs-buffer-offset) position))
+     (list :offset (getf info :emacs-buffer-offset) position)
      (list :snippet (with-input-from-string (s string)
                       (file-position s position)
                       (read-snippet s))))))
@@ -1173,35 +1237,9 @@ Signal an error if no constructor can be found."
 ;;;;; Argument lists
 
 (defimplementation arglist (fun)
-  (etypecase fun
-    (function (function-arglist fun))
-    (symbol (function-arglist (or (macro-function fun)
-                                  (symbol-function fun))))))
-
-(defun function-arglist (fun)
-  (flet ((compiled-function-arglist (x)
-           (let ((args (kernel:%function-arglist x)))
-             (if args
-                 (read-arglist x)
-                 :not-available))))
-    (case (kernel:get-type fun)
-      (#.vm:closure-header-type
-       (compiled-function-arglist
-        (kernel:%closure-function fun)))
-      ((#.vm:function-header-type #.vm:closure-function-header-type)
-       (compiled-function-arglist fun))
-      (#.vm:funcallable-instance-header-type
-       (typecase fun
-         (kernel:byte-function
-          :not-available)
-         (kernel:byte-closure
-          :not-available)
-         (eval:interpreted-function
-          (eval:interpreted-function-arglist fun))
-         (otherwise
-          (clos::generic-function-lambda-list fun))))
-      (t
-       :non-available))))
+  (multiple-value-bind (args winp)
+      (ext:function-arglist fun)
+    (if winp args :not-available)))
 
 (defimplementation function-name (function)
   (cond ((eval:interpreted-function-p function)
@@ -1212,20 +1250,6 @@ Signal an error if no constructor can be found."
          (c::byte-function-name function))
         (t (kernel:%function-name (kernel:%function-self function)))))
 
-;;; A simple case: the arglist is available as a string that we can
-;;; `read'.
-
-(defun read-arglist (fn)
-  "Parse the arglist-string of the function object FN."
-  (let ((string (kernel:%function-arglist
-                 (kernel:%function-self fn)))
-        (package (find-package
-                  (c::compiled-debug-info-package
-                   (kernel:%code-debug-info
-                    (vm::find-code-object fn))))))
-    (with-standard-io-syntax
-      (let ((*package* (or package *package*)))
-        (read-from-string string)))))
 
 ;;; A harder case: an approximate arglist is derived from available
 ;;; debugging information.
@@ -1272,54 +1296,6 @@ Signal an error if no constructor can be found."
     (values (debug-function-arglist (di::function-debug-function fn))
             (kernel:%function-arglist (kernel:%function-self fn)))))
 
-;;; Deriving arglists for byte-compiled functions:
-;;;
-(defun byte-code-function-arglist (fn)
-  ;; There doesn't seem to be much arglist information around for
-  ;; byte-code functions.  Use the arg-count and return something like
-  ;; (arg0 arg1 ...)
-  (etypecase fn
-    (c::simple-byte-function 
-     (loop for i from 0 below (c::simple-byte-function-num-args fn)
-           collect (make-arg-symbol i)))
-    (c::hairy-byte-function 
-     (hairy-byte-function-arglist fn))
-    (c::byte-closure
-     (byte-code-function-arglist (c::byte-closure-function fn)))))
-
-(defun make-arg-symbol (i)
-  (make-symbol (format nil "~A~D" (string 'arg) i)))
-
-;;; A "hairy" byte-function is one that takes a variable number of
-;;; arguments. `hairy-byte-function' is a type from the bytecode
-;;; interpreter.
-;;;
-(defun hairy-byte-function-arglist (fn)
-  (let ((counter -1))
-    (flet ((next-arg () (make-arg-symbol (incf counter))))
-      (with-struct (c::hairy-byte-function- min-args max-args rest-arg-p
-                                            keywords-p keywords) fn
-        (let ((arglist '())
-              (optional (- max-args min-args)))
-          ;; XXX isn't there a better way to write this?
-          ;; (Looks fine to me. -luke)
-          (dotimes (i min-args)
-            (push (next-arg) arglist))
-          (when (plusp optional)
-            (push '&optional arglist)
-            (dotimes (i optional)
-              (push (next-arg) arglist)))
-          (when rest-arg-p
-            (push '&rest arglist)
-            (push (next-arg) arglist))
-          (when keywords-p
-            (push '&key arglist)
-            (loop for (key _ __) in keywords
-                  do (push key arglist))
-            (when (eq keywords-p :allow-others)
-              (push '&allow-other-keys arglist)))
-          (nreverse arglist))))))
-
 
 ;;;; Miscellaneous.
 
@@ -1335,6 +1311,9 @@ Signal an error if no constructor can be found."
 
 (defimplementation default-directory ()
   (namestring (ext:default-directory)))
+
+(defimplementation pathname-to-filename (pathname)
+  (ext:unix-namestring pathname nil))
 
 (defimplementation call-without-interrupts (fn)
   (funcall fn))
@@ -1380,8 +1359,7 @@ Signal an error if no constructor can be found."
   (let ((end (or end most-positive-fixnum)))
     (loop for f = (nth-frame start) then (frame-down f)
 	  for i from start below end
-	  while f
-	  collect f)))
+	  while f collect f)))
 
 (defimplementation print-frame (frame stream)
   (let ((*standard-output* stream))
@@ -1390,7 +1368,7 @@ Signal an error if no constructor can be found."
       (error (e)
         (ignore-errors (princ e stream))))))
 
-(defimplementation frame-source-location-for-emacs (index)
+(defimplementation frame-source-location (index)
   (code-location-source-location (di:frame-code-location (nth-frame index))))
 
 (defimplementation eval-in-frame (form index)
@@ -1693,11 +1671,6 @@ LRA  =  ~X~%" (mapcar #'fixnum
 
 ;;;; Inspecting
 
-(defclass scl-inspector (backend-inspector) ())
-
-(defimplementation make-default-inspector ()
-  (make-instance 'scl-inspector))
-
 (defconstant +lowtag-symbols+ 
   '(vm:even-fixnum-type
     vm:instance-pointer-type
@@ -1740,10 +1713,9 @@ The `symbol-value' of each element is a type tag.")
                                   :key #'symbol-value)))
           (format t ", type: ~A" type-symbol))))))
 
-(defmethod inspect-for-emacs ((o t) (inspector backend-inspector))
+(defmethod emacs-inspect ((o t))
   (cond ((di::indirect-value-cell-p o)
-         (values (format nil "~A is a value cell." o)
-                 `("Value: " (:value ,(c:value-cell-ref o)))))
+                 `("Value: " (:value ,(c:value-cell-ref o))))
         ((alien::alien-value-p o)
          (inspect-alien-value o))
 	(t
@@ -1752,18 +1724,17 @@ The `symbol-value' of each element is a type tag.")
 (defun scl-inspect (o)
   (destructuring-bind (text labeledp . parts)
       (inspect::describe-parts o)
-    (values (format nil "~A~%" text)
+    (list*  (format nil "~A~%" text)
             (if labeledp
                 (loop for (label . value) in parts
                       append (label-value-line label value))
                 (loop for value in parts  for i from 0 
                       append (label-value-line i value))))))
 
-(defmethod inspect-for-emacs ((o function) (inspector backend-inspector))
-  (declare (ignore inspector))
+(defmethod emacs-inspect ((o function))
   (let ((header (kernel:get-type o)))
     (cond ((= header vm:function-header-type)
-           (values (format nil "~A is a function." o)
+           (list*  (format nil "~A is a function.~%" o)
                    (append (label-value-line*
                             ("Self" (kernel:%function-self o))
                             ("Next" (kernel:%function-next o))
@@ -1775,7 +1746,7 @@ The `symbol-value' of each element is a type tag.")
                             (with-output-to-string (s)
                               (disassem:disassemble-function o :stream s))))))
           ((= header vm:closure-header-type)
-           (values (format nil "~A is a closure" o)
+           (list* (format nil "~A is a closure.~%" o)
                    (append 
                     (label-value-line "Function" (kernel:%closure-function o))
                     `("Environment:" (:newline))
@@ -1789,9 +1760,7 @@ The `symbol-value' of each element is a type tag.")
            (call-next-method)))))
 
 
-(defmethod inspect-for-emacs ((o kernel:code-component) (_ backend-inspector))
-  (declare (ignore _))
-  (values (format nil "~A is a code data-block." o)
+(defmethod emacs-inspect ((o kernel:code-component))
           (append 
            (label-value-line* 
             ("code-size" (kernel:%code-code-size o))
@@ -1815,22 +1784,19 @@ The `symbol-value' of each element is a type tag.")
                              (* vm:code-constants-offset vm:word-bytes))
                           (ash 1 vm:lowtag-bits))
                          (ash (kernel:%code-code-size o) vm:word-shift)
-                         :stream s))))))))
+                         :stream s)))))))
 
-(defmethod inspect-for-emacs ((o kernel:fdefn) (inspector backend-inspector))
-  (declare (ignore inspector))
-  (values (format nil "~A is a fdenf object." o)
-          (label-value-line*
+(defmethod emacs-inspect ((o kernel:fdefn))
+  (label-value-line*
            ("name" (kernel:fdefn-name o))
            ("function" (kernel:fdefn-function o))
            ("raw-addr" (sys:sap-ref-32
                         (sys:int-sap (kernel:get-lisp-obj-address o))
-                        (* vm:fdefn-raw-addr-slot vm:word-bytes))))))
+                        (* vm:fdefn-raw-addr-slot vm:word-bytes)))))
 
-(defmethod inspect-for-emacs ((o array) (inspector backend-inspector))
-  inspector
+(defmethod emacs-inspect ((o array))
   (cond ((kernel:array-header-p o)
-         (values (format nil "~A is an array." o)
+         (list*  (format nil "~A is an array.~%" o)
                  (label-value-line*
                   (:header (describe-primitive-type o))
                   (:rank (array-rank o))
@@ -1842,14 +1808,13 @@ The `symbol-value' of each element is a type tag.")
                   (:displaced-p (kernel:%array-displaced-p o))
                   (:dimensions (array-dimensions o)))))
         (t
-         (values (format nil "~A is an simple-array." o)
+         (list*  (format nil "~A is an simple-array.~%" o)
                  (label-value-line*
                   (:header (describe-primitive-type o))
                   (:length (length o)))))))
 
-(defmethod inspect-for-emacs ((o simple-vector) (inspector backend-inspector))
-  inspector
-  (values (format nil "~A is a vector." o)
+(defmethod emacs-inspect ((o simple-vector))
+  (list*  (format nil "~A is a vector.~%" o)
           (append 
            (label-value-line*
             (:header (describe-primitive-type o))
@@ -1859,8 +1824,6 @@ The `symbol-value' of each element is a type tag.")
                    append (label-value-line i (aref o i)))))))
 
 (defun inspect-alien-record (alien)
-  (values
-   (format nil "~A is an alien value." alien)
    (with-struct (alien::alien-value- sap type) alien
      (with-struct (alien::alien-record-type- kind name fields) type
        (append
@@ -1870,16 +1833,14 @@ The `symbol-value' of each element is a type tag.")
          (:name name))
         (loop for field in fields 
               append (let ((slot (alien::alien-record-field-name field)))
-                       (label-value-line slot (alien:slot alien slot)))))))))
+                       (label-value-line slot (alien:slot alien slot))))))))
 
 (defun inspect-alien-pointer (alien)
-  (values
-   (format nil "~A is an alien value." alien)
-   (with-struct (alien::alien-value- sap type) alien
+  (with-struct (alien::alien-value- sap type) alien
      (label-value-line* 
       (:sap sap)
       (:type type)
-      (:to (alien::deref alien))))))
+      (:to (alien::deref alien)))))
   
 (defun inspect-alien-value (alien)
   (typecase (alien::alien-value-type alien)
@@ -1968,7 +1929,7 @@ The `symbol-value' of each element is a type tag.")
 (defimplementation thread-alive-p (thread)
   (not (zerop (thread::thread-dynamic-values thread))))
 
-(defvar *mailbox-lock* (thread:make-lock "Mailbox lock"))
+(defvar *mailbox-lock* (thread:make-lock "Mailbox lock" :interruptible nil))
   
 (defstruct (mailbox)
   (lock (thread:make-lock "Thread mailbox" :type :error-check
@@ -1978,9 +1939,10 @@ The `symbol-value' of each element is a type tag.")
 
 (defun mailbox (thread)
   "Return 'thread's mailbox."
-  (thread:with-lock-held (*mailbox-lock*)
-    (or (getf (thread:thread-plist thread) 'mailbox)
-        (setf (getf (thread:thread-plist thread) 'mailbox) (make-mailbox)))))
+  (sys:without-interrupts
+    (thread:with-lock-held (*mailbox-lock*)
+      (or (getf (thread:thread-plist thread) 'mailbox)
+          (setf (getf (thread:thread-plist thread) 'mailbox) (make-mailbox))))))
   
 (defimplementation send (thread message)
   (let* ((mbox (mailbox thread))
@@ -1989,26 +1951,28 @@ The `symbol-value' of each element is a type tag.")
       (thread:with-lock-held (lock "Mailbox Send")
         (setf (mailbox-queue mbox) (nconc (mailbox-queue mbox)
                                           (list message)))))
-    (mp:process-wakeup thread)
-    message))
-  
+    (mp:process-wakeup thread)))
+
+#+nil
 (defimplementation receive ()
-  (let* ((mbox (mailbox thread:*thread*))
-         (lock (mailbox-lock mbox)))
+  (receive-if (constantly t)))
+
+(defimplementation receive-if (test &optional timeout)
+  (let ((mbox (mailbox thread:*thread*)))
+    (assert (or (not timeout) (eq timeout t)))
     (loop
-     (mp:process-wait-with-timeout "Mailbox read wait" 1
-                                   #'(lambda () (mailbox-queue mbox)))
-     (multiple-value-bind (message winp)
-	 (sys:without-interrupts
-           (mp:with-lock-held (lock "Mailbox read")
-             (let ((queue (mailbox-queue mbox)))
-               (cond (queue
-                      (setf (mailbox-queue mbox) (cdr queue))
-                      (values (car queue) t))
-                     (t
-                      (values nil nil))))))
-       (when winp
-         (return message))))))
+     (check-slime-interrupts)
+     (sys:without-interrupts
+       (mp:with-lock-held ((mailbox-lock mbox))
+         (let* ((q (mailbox-queue mbox))
+                (tail (member-if test q)))
+           (when tail
+             (setf (mailbox-queue mbox) 
+                   (nconc (ldiff q tail) (cdr tail)))
+             (return (car tail))))))
+     (when (eq timeout t) (return (values nil t)))
+     (mp:process-wait-with-timeout
+      "Mailbox read wait" 0.5 (lambda () (some test (mailbox-queue mbox)))))))
 
 
 

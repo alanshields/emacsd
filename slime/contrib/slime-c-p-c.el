@@ -13,7 +13,7 @@
 ;; Add this to your .emacs: 
 ;;
 ;;   (add-to-list 'load-path "<directory-of-this-file>")
-;;   (add-hook 'slime-load-hook (lambda () (require 'slime-c-p-c)))
+;;   (slime-setup '(slime-c-p-c ... possibly other packages ...))
 ;;
 
 
@@ -83,7 +83,7 @@ If false, move point to the end of the inserted text."
 (defun slime-complete-symbol*-fancy-bit ()
   "Do fancy tricks after completing a symbol.
 \(Insert a space or close-paren based on arglist information.)"
-  (let ((arglist (slime-get-arglist (slime-symbol-name-at-point))))
+  (let ((arglist (slime-get-arglist (slime-symbol-at-point))))
     (when arglist
       (let ((args
              ;; Don't intern these symbols
@@ -127,8 +127,8 @@ current buffer."
             ;; If no matching keyword was found, do regular symbol
             ;; completion.
             ))))
-     ((and (> beg 2)
-           (string= (buffer-substring-no-properties (- beg 2) beg) "#\\"))
+     ((and (>= (length token) 2)
+           (string= (subseq token 0 2) "#\\"))
       ;; Character name completion
       (return-from slime-contextual-completions
         (slime-completions-for-character token))))
@@ -145,7 +145,12 @@ current buffer."
 					      ',arg-indices)))
 
 (defun slime-completions-for-character (prefix)
-  (slime-eval `(swank:completions-for-character ,prefix)))
+  (flet ((append-char-syntax (string) (concat "#\\" string)))
+    (let ((result (slime-eval `(swank:completions-for-character
+                                ,(subseq prefix 2)))))
+      (when (car result)
+        (list (mapcar 'append-char-syntax (car result))
+              (append-char-syntax (cadr result)))))))
 
 
 ;;; Complete form
@@ -177,6 +182,7 @@ This is a superset of the functionality of `slime-insert-arglist'."
 (defvar slime-c-p-c-init-undo-stack nil)
 
 (defun slime-c-p-c-init ()
+  (slime-require :swank-arglists)
   ;; save current state for unload
   (push 
    `(progn
@@ -188,12 +194,8 @@ This is a superset of the functionality of `slime-insert-arglist'."
 	',(lookup-key slime-repl-mode-map "\C-c\C-s")))
    slime-c-p-c-init-undo-stack)
   (setq slime-complete-symbol-function 'slime-complete-symbol*)
-  (add-hook 'slime-connected-hook 'slime-c-p-c-on-connect)
   (define-key slime-mode-map "\C-c\C-s" 'slime-complete-form)
   (define-key slime-repl-mode-map "\C-c\C-s" 'slime-complete-form))
-
-(defun slime-c-p-c-on-connect ()
-  (slime-eval-async '(swank:swank-require :swank-arglists)))
 
 (defun slime-c-p-c-unload ()
   (while slime-c-p-c-init-undo-stack

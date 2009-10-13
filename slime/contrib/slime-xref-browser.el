@@ -8,7 +8,7 @@
 ;; Add this to your .emacs: 
 ;;
 ;;   (add-to-list 'load-path "<directory-of-this-file>")
-;;   (add-hook 'slime-load-hook (lambda () (require 'slime-xref-browser)))
+;;   (slime-setup '(slime-xref-browser ... possibly other packages ...))
 ;;
 
 
@@ -19,7 +19,7 @@
       (let ((name (widget-get widget :tag)))
 	(loop for kid in (slime-eval `(swank:mop :subclasses ,name))
 	      collect `(tree-widget :tag ,kid
-				    :dynargs slime-expand-class-node
+				    :expander slime-expand-class-node
 				    :has-children t)))))
 
 (defun slime-browse-classes (name)
@@ -29,7 +29,7 @@
    "*slime class browser*" (slime-current-package) "Class Browser"
    (lambda ()
      (widget-create 'tree-widget :tag name 
-                    :dynargs 'slime-expand-class-node 
+                    :expander 'slime-expand-class-node 
                     :has-echildren t))))
 
 (defvar slime-browser-map nil
@@ -84,14 +84,14 @@ DSPEC can be used to expand the node."
               collect `(tree-widget :tag ,label
                                     :xref-type ,type
                                     :xref-dspec ,dspec
-                                    :dynargs slime-expand-xrefs
+                                    :expander slime-expand-xrefs
                                     :has-children t)))))
 
 (defun slime-browse-xrefs (name type)
   "Show the xref graph of a function in a tree widget."
   (interactive 
    (list (slime-read-from-minibuffer "Name: "
-                                     (slime-symbol-name-at-point))
+                                     (slime-symbol-at-point))
          (read (completing-read "Type: " (slime-bogus-completion-alist
                                           '(":callers" ":callees" ":calls"))
                                 nil t ":"))))
@@ -99,6 +99,6 @@ DSPEC can be used to expand the node."
    "*slime xref browser*" (slime-current-package) "Xref Browser"
    (lambda ()
      (widget-create 'tree-widget :tag name :xref-type type :xref-dspec name 
-                    :dynargs 'slime-expand-xrefs :has-echildren t))))
+                    :expander 'slime-expand-xrefs :has-echildren t))))
 
 (provide 'slime-xref-browser)

@@ -2,6 +2,7 @@
 
 # Run the SLIME test suite inside screen, saving the results to a file.
 
+
 # This script's exit status is the number of tests failed. If no tests
 # fail then no output is printed. If at least one test fails then a
 # one-line summary is printed.
@@ -13,16 +14,33 @@
 # are disclaimed.
 
 function usage () {
-    echo "Usage: $name [-v] [-r] <emacs> <lisp>"
+    cat <<EOF
+Usage: $name [-bsRTS] [-n <name>] <emacs> <lisp>"
+  -b  use batch mode
+  -s  use screen to hide emacs
+  -R  don't show results file
+  -T  no temp directory (use slime in current directory)
+  -S  don't execute tests in random order (use default ordering)
+  -n <name>  run only the test with name <name>
+EOF
     exit 1
 }
 
 name=$0
+batch_mode="" # command line arg for emacs
+dump_results=true
+use_temp_dir=true
+test_name=nil
+randomize=t
 
-while getopts vr opt; do
+while getopts bsRTSn: opt; do
     case $opt in
-	v) verbose=true;;
-	r) dump_results=true;;
+	b) batch_mode="-batch";;
+	s) use_screen=true;;
+	n) test_name="'$OPTARG";;
+	S) randomize=nil;;
+	R) dump_results=false;;
+	T) use_temp_dir=false;;
 	*) usage;;
     esac
 done
@@ -36,47 +54,51 @@ emacs=$1; lisp=$2;
 # for the current lisp.
 
 slimedir=$(dirname $name)
-testdir=/tmp/slime-test.$$
-results=$testdir/results
-dribble=$testdir/dribble
-statusfile=$testdir/status
-
-test -d $testdir && rm -r $testdir
-
-trap "rm -r $testdir" EXIT	# remove temporary directory on exit
-
-mkdir $testdir
-cp -r $slimedir/*.{el,lisp} ChangeLog $slimedir/contrib  $testdir
-mkfifo $dribble
-
-session=slime-screen.$$
-
-screen -S $session -m -D bash -c "$emacs -nw -q -no-site-file --no-site-file \
-       --eval '(setq debug-on-quit t)' \
-       --eval '(setq max-lisp-eval-depth 1000)' \
-       --eval '(setq load-path (cons \"$testdir\" load-path))' \
-       --eval '(require (quote slime))' \
-       --eval '(setq inferior-lisp-program \"$lisp\")' \
-       --eval '(slime-batch-test \"$results\")' > $dribble;\
-       echo \$? > $statusfile" &
-
-screenpid=$!
-
-if [ "$verbose" = true ]; then
-    cat $dribble &
+tmpdir=/tmp/slime-test.$$
+if [ $use_temp_dir == true ] ; then
+    testdir=$tmpdir
 else
-    cat $dribble > /dev/null &
-fi;
+    testdir=$(pwd)
+fi
+results=$tmpdir/results
+statusfile=$tmpdir/status
 
-trap "screen -S $session -X quit" SIGINT
-wait $screenpid
+test -d $tmpdir && rm -r $tmpdir
+
+trap "rm -r $tmpdir" EXIT	# remove temporary directory on exit
+
+mkdir $tmpdir
+if [ $use_temp_dir == true ] ; then 
+    cp -r $slimedir/*.{el,lisp} ChangeLog $slimedir/contrib $tmpdir
+fi
+
+cmd=($emacs -nw -q -no-site-file $batch_mode --no-site-file
+       --eval "(setq debug-on-quit t)"
+       --eval "(add-to-list 'load-path \"$testdir\")"
+       --eval "(require 'slime)"
+       --eval "(setq inferior-lisp-program \"$lisp\")"
+       --eval "(slime-batch-test \"$results\" $test_name $randomize)")
+
+if [ "$use_screen" = "" ]; then
+    "${cmd[@]}"
+    echo $? > $statusfile
+else 
+    session=slime-screen.$$
+    screen -S $session -m -D \
+	bash -c "\"\$@\"; echo \$? > $statusfile" "" "${cmd[@]}" &
+    screenpid=$!
+    trap "screen -S $session -X quit" SIGINT SIGQUIT
+    wait $screenpid
+fi
 
 if [ -f "$statusfile" ]; then
-    [ "$dump_results" = true ] && cat $results;
-    echo $(cat $statusfile) "test(s) failed."
+    [ "$dump_results" = true ] && cat $results
+    status=$(cat $statusfile)
+    echo $status "test(s) failed."
 else
     # Tests crashed
     echo crashed
+    status=255
 fi
 
 exit $status

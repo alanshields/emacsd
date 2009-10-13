@@ -5,6 +5,8 @@
 ;; I guess that only Alan Ruttenberg knows how to use this code.  It
 ;; was in swank.lisp for a long time, so here it is. -- Helmut Eller
 
+(in-package :swank)
+
 (defvar *slime-repl-advance-history* nil 
   "In the dynamic scope of a single form typed at the repl, is set to nil to 
    prevent the repl from advancing the history - * ** *** etc.")
@@ -75,7 +77,8 @@
 		   /// //  // /  / values))
 	   (setq +++ ++  ++ +  + last-form)
 	   (unless (eq *slime-repl-suppress-output* t)
-	     (funcall *send-repl-results-function* values))))))))
+	     (funcall *send-repl-results-function* values)))))))
+  nil)
 
 (setq *listener-eval-function* '%listener-eval)
 

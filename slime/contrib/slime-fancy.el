@@ -17,9 +17,13 @@
 ;;   * Adding new commands, keybindings, menu items
 ;;   * Making things clickable that would otherwise be just plain text
 
+(require 'slime-repl)
+(slime-repl-init)
+
 ;; Better arglist display, can be turned off by customization.
-(require 'slime-autodoc)
-(slime-autodoc-init)
+(unless (featurep 'xemacs)
+  (require 'slime-autodoc)
+  (slime-autodoc-init))
 
 ;; Adds new commands and installs compound-prefix-completion as
 ;; default completion command.  Behaves similar to standard Emacs
@@ -31,9 +35,8 @@
 (require 'slime-editing-commands)
 (slime-editing-commands-init)
 
-;; Makes the inspector fancier.
+;; Makes the inspector fancier.  (Once loaded, can't be turned off.)
 (require 'slime-fancy-inspector)
-(slime-fancy-inspector-init)
 
 ;; Just adds the command C-c M-i.  We do not make fuzzy completion the
 ;; default completion invoked by TAB. --mkoeppe
@@ -70,5 +73,18 @@
 ;; Puts clickable references to documentation into SBCL errors.
 (require 'slime-references)
 (slime-references-init)
+
+;; Makes M-. work on local definitions, too.
+(require 'slime-mdot-fu)
+(slime-mdot-fu-init)
+
+;; Add/Remove a symbol at point from the relevant DEFPACKAGE form
+;; via C-c x.
+(require 'slime-package-fu)
+(slime-package-fu-init)
+
+;; Fontify with-foo and do-foo like standard macros.
+(require 'slime-fontifying-fu)
+(slime-fontifying-fu-init)
 
 (provide 'slime-fancy)

@@ -1,4 +1,4 @@
-;;;; -*- Mode: Lisp; indent-tabs-mode: nil -*-
+;;;; -*- indent-tabs-mode: nil -*-
 
 ;;;; SWANK support for CLISP.
 
@@ -99,12 +99,63 @@
       #+win32 ((ext:getenv "PID")) ; where does that come from?
       (t -1))))
 
+(defimplementation call-with-user-break-handler (handler function)
+  (handler-bind ((system::simple-interrupt-condition
+                  (lambda (c)
+                    (declare (ignore c))
+                    (funcall handler)
+                    (when (find-restart 'socket-status)
+                      (invoke-restart (find-restart 'socket-status)))
+                    (continue))))
+    (funcall function)))
+
 (defimplementation lisp-implementation-type-name ()
   "clisp")
 
 (defimplementation set-default-directory (directory)
   (setf (ext:default-directory) directory)
   (namestring (setf *default-pathname-defaults* (ext:default-directory))))
+
+(defimplementation filename-to-pathname (string)
+  (cond ((member :cygwin *features*)
+         (parse-cygwin-filename string))
+        (t (parse-namestring string))))
+
+(defun parse-cygwin-filename (string)
+  (multiple-value-bind (match _ drive absolute)
+      (regexp:match "^(([a-zA-Z\\]+):)?([\\/])?" string :extended t)
+    (declare (ignore _))
+    (assert (and match (if drive absolute t)) ()
+            "Invalid filename syntax: ~a" string)
+    (let* ((sans-prefix (subseq string (regexp:match-end match)))
+           (path (remove "" (regexp:regexp-split "[\\/]" sans-prefix)))
+           (path (loop for name in path collect
+                       (cond ((equal name "..") ':back)
+                             (t name))))
+           (directoryp (or (equal string "")
+                           (find (aref string (1- (length string))) "\\/"))))
+      (multiple-value-bind (file type)
+          (cond ((and (not directoryp) (last path))
+                 (let* ((file (car (last path)))
+                        (pos (position #\. file :from-end t)))
+                   (cond ((and pos (> pos 0)) 
+                          (values (subseq file 0 pos)
+                                  (subseq file (1+ pos))))
+                         (t file)))))
+        (make-pathname :host nil
+                       :device nil
+                       :directory (cons 
+                                   (if absolute :absolute :relative)
+                                   (let ((path (if directoryp 
+                                                   path 
+                                                   (butlast path))))
+                                     (if drive
+                                         (cons 
+                                          (regexp:match-string string drive)
+                                          path)
+                                         path)))
+                       :name file 
+                       :type type)))))
 
 ;;;; TCP Server
 
@@ -125,6 +176,23 @@
                         :buffered nil ;; XXX should be t
                         :element-type 'character
                         :external-format external-format))
+
+#-win32
+(defimplementation wait-for-input (streams &optional timeout)
+  (assert (member timeout '(nil t)))
+  (let ((streams (mapcar (lambda (s) (list* s :input nil)) streams)))
+    (loop
+     (cond ((check-slime-interrupts) (return :interrupt))
+           (timeout 
+            (socket:socket-status streams 0 0)
+            (return (loop for (s _ . x) in streams
+                          if x collect s)))
+           (t
+            (with-simple-restart (socket-status "Return from socket-status.")
+              (socket:socket-status streams 0 500000))
+            (let ((ready (loop for (s _ . x) in streams
+                               if x collect s)))
+              (when ready (return ready))))))))
 
 ;;;; Coding systems
 
@@ -212,12 +280,14 @@ Return NIL if the symbol is unbound."
     (:function (describe (symbol-function symbol)))
     (:class (describe (find-class symbol)))))
 
-(defun fspec-pathname (symbol)
-  (let ((path (documentation symbol 'sys::file))
+(defun fspec-pathname (spec)
+  (let ((path spec)
+	type
         lines)
     (when (consp path)
-      (psetq path (car path)
-             lines (cdr path)))
+      (psetq type (car path)
+	     path (cadr path)
+             lines (cddr path)))
     (when (and path
                (member (pathname-type path)
                        custom:*compiled-file-types* :test #'equal))
@@ -225,29 +295,47 @@ Return NIL if the symbol is unbound."
             (loop for suffix in custom:*source-file-types*
                thereis (probe-file (make-pathname :defaults path
                                                   :type suffix)))))
-    (values path lines)))
+    (values path type lines)))
 
-(defun fspec-location (fspec)
-  (multiple-value-bind (file lines)
+(defun fspec-location (name fspec)
+  (multiple-value-bind (file type lines)
       (fspec-pathname fspec)
-    (cond (file
-           (multiple-value-bind (truename c) (ignore-errors (truename file))
-             (cond (truename
-                    (make-location (list :file (namestring truename))
-                                   (if (consp lines)
-                                       (list* :line lines)
-                                       (list :function-name (string fspec)))))
-                   (t (list :error (princ-to-string c))))))
-          (t (list :error (format nil "No source information available for: ~S"
-                                  fspec))))))
+    (list (if type (list name type) name)
+	  (cond (file
+		 (multiple-value-bind (truename c) (ignore-errors (truename file))
+		   (cond (truename
+			  (make-location (list :file (namestring truename))
+					 (if (consp lines)
+					     (list* :line lines)
+					     (list :function-name (string name)))
+                                         (when (consp type)
+                                           (list :snippet (format nil "~A" type)))))
+			 (t (list :error (princ-to-string c))))))
+		(t (list :error (format nil "No source information available for: ~S"
+					fspec)))))))
 
 (defimplementation find-definitions (name)
-  (list (list name (fspec-location name))))
+  (mapcar #'(lambda (e) (fspec-location name e)) (documentation name 'sys::file)))
 
 (defun trim-whitespace (string)
   (string-trim #(#\newline #\space #\tab) string))
 
 (defvar *sldb-backtrace*)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (when (string< "2.44" (lisp-implementation-version))
+    (pushnew :clisp-2.44+ *features*)))
+
+(defun sldb-backtrace ()
+  "Return a list ((ADDRESS . DESCRIPTION) ...) of frames."
+  (do ((frames '())
+       (last nil frame)
+       (frame (sys::the-frame)
+              #+clisp-2.44+ (sys::frame-up 1 frame 1)
+              #-clisp-2.44+ (sys::frame-up-1 frame 1))) ; 1 = "all frames"
+      ((eq frame last) (nreverse frames))
+    (unless (boring-frame-p frame)
+      (push frame frames))))
 
 (defimplementation call-with-debugging-environment (debugger-loop-fn)
   (let* (;;(sys::*break-count* (1+ sys::*break-count*))
@@ -260,15 +348,6 @@ Return NIL if the symbol is unbound."
 (defun nth-frame (index)
   (nth index *sldb-backtrace*))
 
-(defun sldb-backtrace ()
-  "Return a list ((ADDRESS . DESCRIPTION) ...) of frames."
-  (do ((frames '())
-       (last nil frame)
-       (frame (sys::the-frame) (sys::frame-up-1 frame 1))) ; 1 = "all frames"
-      ((eq frame last) (nreverse frames))
-    (unless (boring-frame-p frame)
-      (push frame frames))))
-
 (defun boring-frame-p (frame)
   (member (frame-type frame) '(stack-value bind-var bind-env)))
 
@@ -276,6 +355,8 @@ Return NIL if the symbol is unbound."
   (with-output-to-string (s)
     (sys::describe-frame s frame)))
 
+;; FIXME: they changed the layout in 2.44 so the frame-to-string &
+;; string-matching silliness no longer works.
 (defun frame-type (frame)
   ;; FIXME: should bind *print-length* etc. to small values.
   (frame-string-type (frame-to-string frame)))
@@ -310,18 +391,11 @@ Return NIL if the symbol is unbound."
 (defimplementation compute-backtrace (start end)
   (let* ((bt *sldb-backtrace*)
          (len (length bt)))
-    (subseq bt start (min (or end len) len))))
-
-;;; CLISP's REPL sets up an ABORT restart that kills SWANK.  Here we
-;;; can omit that restart so that users don't select it by mistake.
-(defimplementation compute-sane-restarts (condition)
-  ;; The outermost restart is specified to be the last element of the
-  ;; list, hopefully that's our unwanted ABORT restart.
-  (butlast (compute-restarts condition)))
+    (loop for f in (subseq bt start (min (or end len) len))
+          collect f)))
 
 (defimplementation print-frame (frame stream)
-  (let ((str (frame-to-string frame)))
-    ;; (format stream "~A " (frame-string-type str))
+  (let* ((str (frame-to-string frame)))
     (write-string (extract-frame-line str)
                   stream)))
 
@@ -418,7 +492,9 @@ Return two values: NAME and VALUE"
         (venv-ref (next-venv env) (- i (/ (1- (length env)) 2))))))
 
 (defun %parse-stack-values (frame)
-  (labels ((next (fp) (sys::frame-down-1 fp 1))
+  (labels ((next (fp)
+             #+clisp-2.44+ (sys::frame-down 1 fp 1)
+             #-clisp-2.44+ (sys::frame-down-1 fp 1))
            (parse (fp accu)
              (let ((str (frame-to-string fp)))
                (cond ((is-prefix-p "- " str)
@@ -433,13 +509,11 @@ Return two values: NAME and VALUE"
                      (t (parse (next fp) accu))))))
     (parse (next frame) '())))
 
+(setq *features* (remove :clisp-2.44+ *features*))
+
 (defun is-prefix-p (pattern string)
   (not (mismatch pattern string :end2 (min (length pattern)
                                            (length string)))))
-
-(defimplementation frame-catch-tags (index)
-  (declare (ignore index))
-  nil)
 
 (defimplementation return-from-frame (index form)
   (sys::return-from-eval-frame (nth-frame index) form))
@@ -447,7 +521,7 @@ Return two values: NAME and VALUE"
 (defimplementation restart-frame (index)
   (sys::redo-eval-frame (nth-frame index)))
 
-(defimplementation frame-source-location-for-emacs (index)
+(defimplementation frame-source-location (index)
   `(:error
     ,(format nil "frame-source-location not implemented. (frame: ~A)"
              (nth-frame index))))
@@ -516,7 +590,7 @@ Execute BODY with NAME's function slot set to FUNCTION."
                           (list ':line lineno1)))
           (*buffer-name*
            (make-location (list ':buffer *buffer-name*)
-                          (list ':position *buffer-offset*)))
+                          (list ':offset *buffer-offset* 0)))
           (t
            (list :error "No error location available")))))
 
@@ -552,22 +626,28 @@ Execute BODY with NAME's function slot set to FUNCTION."
                           :message (princ-to-string condition)
                           :location (compiler-note-location))))
 
-(defimplementation swank-compile-file (filename load-p external-format)
+(defimplementation swank-compile-file (input-file output-file
+                                       load-p external-format)
   (with-compilation-hooks ()
     (with-compilation-unit ()
-      (let ((fasl-file (compile-file filename
-                                     :external-format external-format)))
-        (when (and load-p fasl-file)
-          (load fasl-file))
-        nil))))
+      (multiple-value-bind (fasl-file warningsp failurep)
+          (compile-file input-file 
+                        :output-file output-file
+                        :external-format external-format)
+        (values fasl-file warningsp
+                (or failurep 
+                    (and load-p 
+                         (not (load fasl-file)))))))))
 
-(defimplementation swank-compile-string (string &key buffer position directory)
-  (declare (ignore directory))
+(defimplementation swank-compile-string (string &key buffer position filename
+                                         policy)
+  (declare (ignore filename policy))
   (with-compilation-hooks ()
     (let ((*buffer-name* buffer)
           (*buffer-offset* position))
       (funcall (compile nil (read-from-string
-                             (format nil "(~S () ~A)" 'lambda string)))))))
+                             (format nil "(~S () ~A)" 'lambda string))))
+      t)))
 
 ;;;; Portable XREF from the CMU AI repository.
 
@@ -587,7 +667,7 @@ Execute BODY with NAME's function slot set to FUNCTION."
 (defun xref-results (symbols)
   (let ((xrefs '()))
     (dolist (symbol symbols)
-      (push (list symbol (fspec-location symbol)) xrefs))
+      (push (fspec-location symbol symbol) xrefs))
     xrefs))
 
 (when (find-package :swank-loader)
@@ -627,12 +707,7 @@ Execute BODY with NAME's function slot set to FUNCTION."
 
 ;;;; Inspecting
 
-(defclass clisp-inspector (backend-inspector) ())
-
-(defimplementation make-default-inspector () (make-instance 'clisp-inspector))
-
-(defmethod inspect-for-emacs ((o t) (inspector backend-inspector))
-  (declare (ignore inspector))
+(defmethod emacs-inspect ((o t))
   (let* ((*print-array* nil) (*print-pretty* t)
          (*print-circle* t) (*print-escape* t)
          (*print-lines* custom:*inspect-print-lines*)
@@ -643,9 +718,10 @@ Execute BODY with NAME's function slot set to FUNCTION."
          (*package* tmp-pack)
          (sys::*inspect-unbound-value* (intern "#<unbound>" tmp-pack)))
     (let ((inspection (sys::inspect-backend o)))
-      (values (format nil "~S~% ~A~{~%~A~}" o
+      (append (list
+               (format nil "~S~% ~A~{~%~A~}~%" o
                       (sys::insp-title inspection)
-                      (sys::insp-blurb inspection))
+                      (sys::insp-blurb inspection)))
               (loop with count = (sys::insp-num-slots inspection)
                     for i below count
                     append (multiple-value-bind (value name)
@@ -658,6 +734,127 @@ Execute BODY with NAME's function slot set to FUNCTION."
   #+lisp=cl (ext:quit)
   #-lisp=cl (lisp:quit))
 
+
+(defimplementation preferred-communication-style ()
+  nil)
+
+;;; FIXME
+;;;
+;;; Clisp 2.48 added experimental support for threads. Basically, you
+;;; can use :SPAWN now, BUT:
+;;; 
+;;;   - there are problems with GC, and threads stuffed into weak
+;;;     hash-tables as is the case for *THREAD-PLIST-TABLE*.
+;;;
+;;;     See test case at
+;;;       http://thread.gmane.org/gmane.lisp.clisp.devel/20429
+;;;
+;;;     Even though said to be fixed, it's not:
+;;;
+;;;       http://thread.gmane.org/gmane.lisp.clisp.devel/20429/focus=20443
+;;;
+;;;   - The DYNAMIC-FLET above is an implementation technique that's
+;;;     probably not sustainable in light of threads. This got to be
+;;;     rewritten.
+;;;
+;;; TCR (2009-07-30)
+
+#+#.(cl:if (cl:find-package "MP") '(:and) '(:or)) 
+(progn
+  (defimplementation spawn (fn &key name)
+    (mp:make-thread fn :name name))
+
+  (defvar *thread-plist-table-lock*
+    (mp:make-mutex :name "THREAD-PLIST-TABLE-LOCK"))
+
+  (defvar *thread-plist-table* (make-hash-table :weak :key)
+    "A hashtable mapping threads to a plist.")
+
+  (defvar *thread-id-counter* 0)
+
+  (defimplementation thread-id (thread)
+    (mp:with-mutex-lock (*thread-plist-table-lock*)
+      (or (getf (gethash thread *thread-plist-table*) 'thread-id)
+          (setf (getf (gethash thread *thread-plist-table*) 'thread-id)
+                (incf *thread-id-counter*)))))
+
+  (defimplementation find-thread (id)
+    (find id (all-threads)
+          :key (lambda (thread)
+                 (getf (gethash thread *thread-plist-table*) 'thread-id))))
+
+  (defimplementation thread-name (thread)
+    ;; To guard against returning #<UNBOUND>.
+    (princ-to-string (mp:thread-name thread)))
+
+  (defimplementation thread-status (thread)
+    (if (thread-alive-p thread)
+        "RUNNING"
+        "STOPPED"))
+
+  (defimplementation make-lock (&key name)
+    (mp:make-mutex :name name :recursive-p t))
+
+  (defimplementation call-with-lock-held (lock function)
+    (mp:with-mutex-lock (lock)
+      (funcall function)))
+
+  (defimplementation current-thread ()
+    (mp:current-thread))
+
+  (defimplementation all-threads ()
+    (mp:list-threads))
+
+  (defimplementation interrupt-thread (thread fn)
+    (mp:thread-interrupt thread :function fn))
+
+  (defimplementation kill-thread (thread)
+    (mp:thread-interrupt thread :function t))
+
+  (defimplementation thread-alive-p (thread)
+    (mp:thread-active-p thread))
+
+  (defvar *mailboxes-lock* (make-lock :name "MAILBOXES-LOCK"))
+  (defvar *mailboxes* (list))
+
+  (defstruct (mailbox (:conc-name mailbox.))
+    thread
+    (lock (make-lock :name "MAILBOX.LOCK"))
+    (waitqueue  (mp:make-exemption :name "MAILBOX.WAITQUEUE"))
+    (queue '() :type list))
+
+  (defun mailbox (thread)
+    "Return THREAD's mailbox."
+    (mp:with-mutex-lock (*mailboxes-lock*)
+      (or (find thread *mailboxes* :key #'mailbox.thread)
+          (let ((mb (make-mailbox :thread thread)))
+            (push mb *mailboxes*)
+            mb))))
+
+  (defimplementation send (thread message)
+    (let* ((mbox (mailbox thread))
+           (lock (mailbox.lock mbox)))
+      (mp:with-mutex-lock (lock)
+        (setf (mailbox.queue mbox)
+              (nconc (mailbox.queue mbox) (list message)))
+        (mp:exemption-broadcast (mailbox.waitqueue mbox)))))
+
+  (defimplementation receive-if (test &optional timeout)
+    (let* ((mbox (mailbox (current-thread)))
+           (lock (mailbox.lock mbox)))
+      (assert (or (not timeout) (eq timeout t)))
+      (loop
+       (check-slime-interrupts)
+       (mp:with-mutex-lock (lock)
+         (let* ((q (mailbox.queue mbox))
+                (tail (member-if test q)))
+           (when tail 
+             (setf (mailbox.queue mbox) (nconc (ldiff q tail) (cdr tail)))
+             (return (car tail))))
+         (when (eq timeout t) (return (values nil t)))
+         (mp:exemption-wait (mailbox.waitqueue mbox) lock :timeout 0.2))))))
+ 
+
 ;;;; Weak hashtables
 
 (defimplementation make-weak-key-hash-table (&rest args)
@@ -665,6 +862,12 @@ Execute BODY with NAME's function slot set to FUNCTION."
 
 (defimplementation make-weak-value-hash-table (&rest args)
   (apply #'make-hash-table :weak :value args))
+
+(defimplementation save-image (filename &optional restart-function)
+  (let ((args `(,filename 
+                ,@(if restart-function 
+                      `((:init-function ,restart-function))))))
+    (apply #'ext:saveinitmem args)))
 
 ;;; Local Variables:
 ;;; eval: (put 'compile-file-frobbing-notes 'lisp-indent-function 1)

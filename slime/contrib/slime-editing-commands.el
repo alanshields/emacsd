@@ -25,8 +25,7 @@
 
 (defun slime-end-of-defun ()
   (interactive)
-  (if (and (boundp 'slime-repl-input-end-mark)
-           slime-repl-input-end-mark)
+  (if (eq major-mode 'slime-repl-mode)
       (slime-repl-end-of-defun)
       (end-of-defun)))
 
@@ -184,6 +183,7 @@ be treated as a paragraph.  This is useful for filling docstrings."
 (defun slime-editing-commands-init ()
   (define-key slime-mode-map "\M-\C-a"  'slime-beginning-of-defun)
   (define-key slime-mode-map "\M-\C-e"  'slime-end-of-defun)
-  (define-key slime-mode-map "\C-c\M-q" 'slime-reindent-defun))
+  (define-key slime-mode-map "\C-c\M-q" 'slime-reindent-defun)
+  (define-key slime-mode-map "\C-c\C-]" 'slime-close-all-parens-in-sexp))
 
 (provide 'slime-editing-commands)

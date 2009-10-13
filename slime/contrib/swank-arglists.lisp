@@ -12,6 +12,40 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (swank-require :swank-c-p-c))
 
+(defun length= (seq n)
+  "Test for whether SEQ contains N number of elements. I.e. it's equivalent
+ to (= (LENGTH SEQ) N), but besides being more concise, it may also be more
+ efficiently implemented."
+  (etypecase seq 
+    (list (do ((i n (1- i))
+               (list seq (cdr list)))
+              ((or (<= i 0) (null list))
+               (and (zerop i) (null list)))))
+    (sequence (= (length seq) n))))
+
+(defun ensure-list (thing)
+  (if (listp thing) thing (list thing)))
+
+(defun recursively-empty-p (list)
+  "Returns whether LIST consists only of arbitrarily nested empty lists."
+  (cond ((not (listp list)) nil)
+	((null list) t)
+	(t (every #'recursively-empty-p list))))
+
+(defun maybecall (bool fn &rest args)
+  "Call FN with ARGS if BOOL is T. Otherwise return ARGS as multiple values."
+  (if bool (apply fn args) (values-list args)))
+
+(defun exactly-one-p (&rest values)
+  "If exactly one value in VALUES is non-NIL, this value is returned.
+Otherwise NIL is returned."
+  (let ((found nil))
+    (dolist (v values)
+      (when v (if found
+                  (return-from exactly-one-p nil)
+                  (setq found v))))
+    found))
+
 (defun valid-operator-symbol-p (symbol)
   "Is SYMBOL the name of a function, a macro, or a special-operator?"
   (or (fboundp symbol)
@@ -24,46 +58,95 @@
   (let ((symbol (parse-symbol string)))
     (valid-operator-symbol-p symbol)))
 
+(defun valid-function-name-p (form)
+  (or (symbolp form)
+      (and (consp form)
+           (second form)
+           (not (third form))
+           (eq (first form) 'setf)
+           (symbolp (second form)))))
+
+;;; A ``raw form spec'' can be either: 
+;;; 
+;;;   i)   a list of strings representing a Common Lisp form
+;;; 
+;;;   ii)  a list of strings as of i), but which additionally 
+;;;        contains other raw form specs
+;;; 
+;;;   iii) one of:
+;;; 
+;;;      a)  (:declaration declspec) 
+;;; 
+;;;            where DECLSPEC is a raw form spec.
+;;; 
+;;;      b)  (:type-specifier typespec) 
+;;;        
+;;;            where TYPESPEC is a raw form spec.
+;;; 
+;;; 
+;;; A ``form spec'' is either
+;;; 
+;;;   1) a normal Common Lisp form
+;;; 
+;;;   2) a Common Lisp form with a list as its CAR specifying what namespace
+;;;      the operator is supposed to be interpreted in:
+;;; 
+;;;        a) ((:declaration decl-identifier) declarg1 declarg2 ...)
+;;; 
+;;;        b) ((:type-specifier typespec-op) typespec-arg1 typespec-arg2 ...)
+;;; 
+;;; 
+;;; Examples:
+;;; 
+;;;   ("defmethod")                       =>  (defmethod)
+;;;   ("cl:defmethod")                    =>  (cl:defmethod)
+;;;   ("defmethod" "print-object\)        =>  (defmethod print-object)
+;;; 
+;;;   ("foo" ("bar" ("quux")) "baz")      =>  (foo (bar (quux)) baz)
+;;; 
+;;;   (:declaration ("optimize"))         =>  ((:declaration optimize))
+;;;   (:declaration ("type" "string"))    =>  ((:declaration type) string)
+;;;   (:type-specifier ("float"))         =>  ((:type-specifier float))
+;;;   (:type-specifier ("float" 0 100))   =>  ((:type-specifier float) 0 100)
+;;;
+
 (defslimefun arglist-for-echo-area (raw-specs &key arg-indices
-                                                   print-right-margin print-lines)
+                                              print-right-margin print-lines)
   "Return the arglist for the first valid ``form spec'' in
 RAW-SPECS. A ``form spec'' is a superset of functions, macros,
-special-ops, declarations and type specifiers.
-
-For more information about the format of ``raw form specs'' and
-``form specs'', please see PARSE-FORM-SPEC."
+special-ops, declarations and type specifiers."
   (handler-case 
       (with-buffer-syntax ()
         (multiple-value-bind (form-spec position newly-interned-symbols)
             (parse-first-valid-form-spec raw-specs #'read-conversatively-for-autodoc)
-          (unwind-protect
-               (when form-spec
+          (when form-spec
+            (unwind-protect
                  (let ((arglist (arglist-from-form-spec form-spec :remove-args nil)))
-                   (unless (eql arglist :not-available)
-                     (multiple-value-bind (type operator arguments)
+                   (unless (eq arglist :not-available)
+                     (multiple-value-bind (type operator)
                          (split-form-spec form-spec)
-                       (declare (ignore arguments))
-                       (multiple-value-bind (stringified-arglist)
-                           (decoded-arglist-to-string
-                            arglist
-                            :operator operator
-                            :print-right-margin print-right-margin
-                            :print-lines print-lines
-                            :highlight (let ((index (nth position arg-indices)))
-					 ;; don't highlight the operator
-					 (and index (not (zerop index)) index)))
-			 ;; Post formatting:
+                       (let* ((index (nth position arg-indices))
+                              (stringified-arglist
+                               (decoded-arglist-to-string
+                                arglist
+                                :operator operator
+                                :print-right-margin print-right-margin
+                                :print-lines print-lines
+                                ;; Do not highlight the operator:
+                                :highlight (and index (not (zerop index)) index))))
+                         ;; Post formatting:
                          (case type
                            (:type-specifier (format nil "[Typespec] ~A" stringified-arglist))
                            (:declaration
-			    (locally (declare (special *arglist-pprint-bindings*))
-			      (with-bindings *arglist-pprint-bindings*
-				(let ((op (%find-declaration-operator raw-specs position)))
-				  (if op
-				      (format nil "(~A ~A)" op stringified-arglist)
-				      (format nil "[Declaration] ~A" stringified-arglist))))))
-                           (t stringified-arglist)))))))
-            (mapc #'unintern-in-home-package newly-interned-symbols))))
+                            (locally (declare (special *arglist-pprint-bindings*))
+                              (with-bindings *arglist-pprint-bindings*
+                                ;; Try to print ``(declare (declspec))'' (or ``declaim'' etc.)
+                                (let ((op (%find-declaration-operator raw-specs position)))
+                                  (if op
+                                      (format nil "(~A ~A)" op stringified-arglist)
+                                      (format nil "[Declaration] ~A" stringified-arglist))))))
+                           (t stringified-arglist))))))
+              (mapc #'unintern-in-home-package newly-interned-symbols)))))
     (error (cond)
       (format nil "ARGLIST (error): ~A" cond))
     ))
@@ -75,10 +158,7 @@ For more information about the format of ``raw form specs'' and
 ;; This is a wrapper object around anything that came from Slime and
 ;; could not reliably be read. 
 (defstruct (arglist-dummy
-	     (:conc-name #:arglist-dummy.)
-	     (:print-object (lambda (struct stream)
-			      (with-struct (arglist-dummy. string-representation) struct
-				(write-string string-representation stream)))))
+	     (:conc-name #:arglist-dummy.))
   string-representation)
 
 (defun read-conversatively-for-autodoc (string)
@@ -94,11 +174,20 @@ In such a case (that no symbol could be found), an object of type
 ARGLIST-DUMMY is returned instead, which works as a placeholder
 datum for subsequent logics to rely on."
   (let* ((string  (string-left-trim '(#\Space #\Tab #\Newline) string))
-	 (quoted? (eql (aref string 0) #\')))
+         (length  (length string))
+	 (prefix  (cond ((eql (aref string 0) #\') :quote)
+                        ((search "#'" string :end2 (min length 2)) :sharpquote)
+                        (t nil))))
     (multiple-value-bind (symbol found?)
-	(parse-symbol (if quoted? (subseq string 1) string))
+	(parse-symbol (case prefix
+                        (:quote      (subseq string 1))
+                        (:sharpquote (subseq string 2))
+                        (t string)))
       (if found?
-	  (if quoted? `(quote ,symbol) symbol)
+          (case prefix
+            (:quote      `(quote ,symbol))
+            (:sharpquote `(function ,symbol))
+            (t symbol))
 	  (make-arglist-dummy :string-representation string)))))
 
 
@@ -106,51 +195,7 @@ datum for subsequent logics to rely on."
   "Takes a raw (i.e. unparsed) form spec from SLIME and returns a
 proper form spec for further processing within SWANK. Returns NIL
 if RAW-SPEC could not be parsed. Symbols that had to be interned
-in course of the conversion, are returned as secondary return value.
-
-A ``raw form spec'' can be either: 
-
-  i)   a list of strings representing a Common Lisp form
-
-  ii)  a list of strings as of i), but which additionally 
-       contains other raw form specs
-
-  iii) one of:
-
-     a)  (:declaration declspec) 
-
-           where DECLSPEC is a raw form spec.
-
-     b)  (:type-specifier typespec) 
-       
-           where TYPESPEC is a raw form spec.
-
-
-A ``form spec'' is either
-
-  1) a normal Common Lisp form
-
-  2) a Common Lisp form with a list as its CAR specifying what namespace
-     the operator is supposed to be interpreted in:
-
-       a) ((:declaration decl-identifier) declarg1 declarg2 ...)
-
-       b) ((:type-specifier typespec-op) typespec-arg1 typespec-arg2 ...)
-
-
-Examples:
-
-  (\"defmethod\")                               =>  (defmethod)
-  (\"cl:defmethod\")                            =>  (cl:defmethod)
-  (\"defmethod\" \"print-object\")              =>  (defmethod print-object)
-
-  (\"foo\" (\"bar\" (\"quux\")) \"baz\"         =>  (foo (bar (quux)) baz)
-
-  (:declaration \"optimize\" \"(optimize)\")    =>  ((:declaration optimize))
-  (:declaration \"type\"     \"(type string)\") =>  ((:declaration type) string)
-  (:type-specifier \"float\" \"(float)\")       =>  ((:type-specifier float))
-  (:type-specifier \"float\" \"(float 0 100)\") =>  ((:type-specifier float) 0 100)
-"
+in course of the conversion, are returned as secondary return value."
   (flet ((parse-extended-spec (raw-extension extension-flag)
            (when (and (stringp (first raw-extension)) ; (:DECLARATION (("a" "b" ("c")) "d"))
                       (nth-value 1 (parse-symbol (first raw-extension))))
@@ -243,6 +288,29 @@ the flag if a symbol had to be interned."
     (assert (= pos (length string)))
     (values sexp interned?)))
 
+(defun read-softly-from-string (string)
+  "Returns three values:
+
+     1. the object resulting from READing STRING.
+
+     2. The index of the first character in STRING that was not read.
+
+     3. T if the object is a symbol that had to be newly interned
+        in some package. (This does not work for symbols in
+        compound forms like lists or vectors.)"
+  (multiple-value-bind (symbol found? symbol-name package) (parse-symbol string)
+    (if found?
+        (values symbol (length string) nil)
+        (multiple-value-bind (sexp pos) (read-from-string string)
+          (values sexp pos
+                  (when (symbolp sexp)
+                    (prog1 t
+                      ;; assert that PARSE-SYMBOL didn't parse incorrectly.
+                      (assert (and (equal symbol-name (symbol-name sexp))
+                                   (eq package (symbol-package sexp)))))))))))
+
+(defun unintern-in-home-package (symbol)
+  (unintern symbol (symbol-package symbol)))
 
 (defstruct (arglist (:conc-name arglist.) (:predicate arglist-p))
   provided-args         ; list of the provided actual arguments
@@ -390,7 +458,20 @@ the flag if a symbol had to be interned."
     (*print-length*   . 20)
     (*print-escape*   . nil))) ; no package qualifiers.
 
-(defun decoded-arglist-to-string (arglist
+(defslimefun format-arglist-for-echo-area
+    (arglist &rest args
+	     &key operator highlight (package *package*)
+	     print-right-margin print-lines)
+  "Formats ARGLIST (given as string) for Emacs' echo area."
+  (declare (ignore operator highlight package print-right-margin print-lines))
+  (handler-case
+      (apply #'decoded-arglist-to-string
+             (decode-arglist (read-from-string arglist))
+             args)
+    (error (e)
+      (format nil "ARGLIST (error): ~A" e))))
+
+(defun decoded-arglist-to-string (decoded-arglist
                                   &key operator highlight (package *package*)
                                   print-right-margin print-lines)
   "Print the decoded ARGLIST for display in the echo area.  The
@@ -404,16 +485,18 @@ If OPERATOR is non-nil, put it in front of the arglist."
 	(let ((*package* package)
 	      (*print-right-margin* print-right-margin)
 	      (*print-lines* print-lines))       
-	  (print-arglist arglist :operator operator :highlight highlight))))))
+	  (print-arglist decoded-arglist :operator operator :highlight highlight))))))
 
 (defslimefun variable-desc-for-echo-area (variable-name)
   "Return a short description of VARIABLE-NAME, or NIL."
   (with-buffer-syntax ()
     (let ((sym (parse-symbol variable-name)))
       (if (and sym (boundp sym))
-          (let ((*print-pretty* nil) (*print-level* 4)
-                (*print-length* 10) (*print-circle* t))
-             (format nil "~A => ~A" sym (symbol-value sym)))))))
+          (let ((*print-pretty* t) (*print-level* 4)
+                (*print-length* 10) (*print-lines* 1))
+	    (call/truncated-output-to-string 
+	     75 (lambda (s)
+		  (format s "~A => ~S" sym (symbol-value sym)))))))))
 
 (defun decode-required-arg (arg)
   "ARG can be a symbol or a destructuring pattern."
@@ -520,65 +603,71 @@ Return an OPTIONAL-ARG structure."
 
 (defun decode-arglist (arglist)
   "Parse the list ARGLIST and return an ARGLIST structure."
-  (let ((mode nil)
-        (result (make-arglist)))
-    (dolist (arg arglist)
-      (cond
-        ((eql mode '&unknown-junk)      
-         ;; don't leave this mode -- we don't know how the arglist
-         ;; after unknown lambda-list keywords is interpreted
-         (push arg (arglist.unknown-junk result)))
-        ((eql arg '&allow-other-keys)
-         (setf (arglist.allow-other-keys-p result) t))
-        ((eql arg '&key)
-         (setf (arglist.key-p result) t
-               mode arg))
-        ((member arg '(&optional &rest &body &aux))
-         (setq mode arg))
-        ((member arg '(&whole &environment))
-         (setq mode arg)
-         (push arg (arglist.known-junk result)))
-        ((and (symbolp arg)
-              (string= (symbol-name arg) (string '#:&any))) ; may be interned
-         (setf (arglist.any-p result) t)                    ;  in any *package*.
-         (setq mode '&any))
-        ((member arg lambda-list-keywords)
-         (setq mode '&unknown-junk)
-         (push arg (arglist.unknown-junk result)))
-        (t
-         (ecase mode
-	   (&key
-	    (push (decode-keyword-arg arg) 
-                  (arglist.keyword-args result)))
-	   (&optional
-	    (push (decode-optional-arg arg) 
-                  (arglist.optional-args result)))
-	   (&body
-	    (setf (arglist.body-p result) t
-                  (arglist.rest result) arg))
-	   (&rest
-            (setf (arglist.rest result) arg))
-	   (&aux
-            (push (decode-optional-arg arg)
-                  (arglist.aux-args result)))
-	   ((nil)
-	    (push (decode-required-arg arg)
-                  (arglist.required-args result)))
-           ((&whole &environment)
-            (setf mode nil)
-            (push arg (arglist.known-junk result)))
-           (&any
-            (push arg (arglist.any-args result)))))))
-    (nreversef (arglist.required-args result))
-    (nreversef (arglist.optional-args result))
-    (nreversef (arglist.keyword-args result))
-    (nreversef (arglist.aux-args result))
-    (nreversef (arglist.any-args result))
-    (nreversef (arglist.known-junk result))
-    (nreversef (arglist.unknown-junk result))
-    (assert (or (and (not (arglist.key-p result)) (not (arglist.any-p result)))
-                (exactly-one-p (arglist.key-p result) (arglist.any-p result))))
-    result))
+  (loop
+    with mode = nil
+    with result = (make-arglist)
+    for arg = (if (consp arglist)
+                (pop arglist)
+                (progn
+                  (setf mode '&rest)
+                  arglist))
+    do (cond
+         ((eql mode '&unknown-junk)      
+          ;; don't leave this mode -- we don't know how the arglist
+          ;; after unknown lambda-list keywords is interpreted
+          (push arg (arglist.unknown-junk result)))
+         ((eql arg '&allow-other-keys)
+          (setf (arglist.allow-other-keys-p result) t))
+         ((eql arg '&key)
+          (setf (arglist.key-p result) t
+                mode arg))
+         ((member arg '(&optional &rest &body &aux))
+          (setq mode arg))
+         ((member arg '(&whole &environment))
+          (setq mode arg)
+          (push arg (arglist.known-junk result)))
+         ((and (symbolp arg)
+               (string= (symbol-name arg) (string '#:&any))) ; may be interned
+          (setf (arglist.any-p result) t)                    ;  in any *package*.
+          (setq mode '&any))
+         ((member arg lambda-list-keywords)
+          (setq mode '&unknown-junk)
+          (push arg (arglist.unknown-junk result)))
+         (t
+          (ecase mode
+            (&key
+               (push (decode-keyword-arg arg) 
+                     (arglist.keyword-args result)))
+            (&optional
+               (push (decode-optional-arg arg) 
+                     (arglist.optional-args result)))
+            (&body
+               (setf (arglist.body-p result) t
+                     (arglist.rest result) arg))
+            (&rest
+               (setf (arglist.rest result) arg))
+            (&aux
+               (push (decode-optional-arg arg)
+                     (arglist.aux-args result)))
+            ((nil)
+               (push (decode-required-arg arg)
+                     (arglist.required-args result)))
+            ((&whole &environment)
+               (setf mode nil)
+               (push arg (arglist.known-junk result)))
+            (&any
+               (push arg (arglist.any-args result))))))
+    until (atom arglist)
+    finally (nreversef (arglist.required-args result))
+    finally (nreversef (arglist.optional-args result))
+    finally (nreversef (arglist.keyword-args result))
+    finally (nreversef (arglist.aux-args result))
+    finally (nreversef (arglist.any-args result))
+    finally (nreversef (arglist.known-junk result))
+    finally (nreversef (arglist.unknown-junk result))
+    finally (assert (or (and (not (arglist.key-p result)) (not (arglist.any-p result)))
+                        (exactly-one-p (arglist.key-p result) (arglist.any-p result))))
+    finally (return result)))
 
 (defun encode-arglist (decoded-arglist)
   (append (mapcar #'encode-required-arg (arglist.required-args decoded-arglist))
@@ -1014,7 +1103,8 @@ Examples:
           (split-form-spec form-spec)
         (arglist-dispatch type operator arguments :remove-args remove-args))))
 
-(defmacro with-availability ((var) form &body body)
+
+(defmacro with-available-arglist ((var) form &body body)
   `(let ((,var ,form))
      (if (eql ,var :not-available)
          :not-available
@@ -1022,7 +1112,7 @@ Examples:
 
 (defgeneric arglist-dispatch (operator-type operator arguments &key remove-args))
   
-(defmethod arglist-dispatch (operator-type operator arguments &key (remove-args t))
+(defmethod arglist-dispatch ((operator-type t) operator arguments &key (remove-args t))
   (when (and (symbolp operator)
              (valid-operator-symbol-p operator))
     (multiple-value-bind (decoded-arglist determining-args any-enrichment)
@@ -1048,17 +1138,39 @@ Examples:
                              arguments &key (remove-args t))
   (when (and (listp arguments)
 	     (not (null arguments)) ;have generic function name
-	     (notany #'listp (rest arguments))) ;don't have arglist yet 
+	     (notany #'listp (rest arguments))) ;don't have arglist yet
     (let* ((gf-name (first arguments))
 	   (gf (and (valid-function-name-p gf-name)
 		    (fboundp gf-name)
 		    (fdefinition gf-name))))
       (when (typep gf 'generic-function)
-        (with-availability (arglist) (arglist gf)
+        (with-available-arglist (arglist) (arglist gf)
           (return-from arglist-dispatch
             (values (make-arglist :provided-args (if remove-args
                                                      nil
                                                      (list gf-name))
+                                  :required-args (list arglist)
+                                  :rest "body" :body-p t)
+                    t))))))
+  (call-next-method))
+
+;;; FIXME: This was copied & pasted from DEFMETHOD. Refactoring needed!
+;;;
+(defmethod arglist-dispatch ((operator-type (eql :function)) (operator (eql 'define-compiler-macro))
+                             arguments &key (remove-args t))
+  (when (and (listp arguments)
+	     (not (null arguments)) ;have function name
+	     (notany #'listp (rest arguments))) ;don't have arglist yet
+    (let* ((fn-name (first arguments))
+	   (fn (and (valid-function-name-p fn-name)
+		    (fboundp fn-name)
+		    (fdefinition fn-name))))
+      (when fn
+        (with-available-arglist (arglist) (arglist fn)
+          (return-from arglist-dispatch
+            (values (make-arglist :provided-args (if remove-args
+                                                     nil
+                                                     (list fn-name))
                                   :required-args (list arglist)
                                   :rest "body" :body-p t)
                     t))))))
@@ -1075,12 +1187,12 @@ Examples:
 (defmethod arglist-dispatch ((operator-type (eql :function)) (operator (eql 'declare))
                              arguments &key (remove-args t))
   ;; Catching 'DECLARE before SWANK-BACKEND:ARGLIST can barf.
-  (declare (ignore remove-args))
+  (declare (ignore remove-args arguments))
   (make-arglist :rest '#:decl-specifiers))
 
 (defmethod arglist-dispatch ((operator-type (eql :declaration))
                              decl-identifier decl-args &key (remove-args t))
-  (with-availability (arglist)
+  (with-available-arglist (arglist)
       (declaration-arglist decl-identifier)
     (maybecall remove-args #'remove-actual-args
                (decode-arglist arglist) decl-args))
@@ -1090,7 +1202,7 @@ Examples:
 
 (defmethod arglist-dispatch ((operator-type (eql :type-specifier))
                              type-specifier specifier-args &key (remove-args t))
-  (with-availability (arglist)
+  (with-available-arglist (arglist)
       (type-specifier-arglist type-specifier)
     (maybecall remove-args #'remove-actual-args
                (decode-arglist arglist) specifier-args))

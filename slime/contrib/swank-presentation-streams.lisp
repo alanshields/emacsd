@@ -121,12 +121,10 @@ Two special return values:
 		    #+sbcl
 		    (let ()
 		      (declare (notinline sb-pretty::pretty-stream-target))
-		      (or (and (typep stream 'sb-impl::indenting-stream)
-			       (slime-stream-p (sb-impl::indenting-stream-stream stream)))
-			  (and (typep stream (find-symbol "PRETTY-STREAM" 'sb-pretty))
-			       (find-symbol "ENQUEUE-ANNOTATION" 'sb-pretty)
-			       (not *use-dedicated-output-stream*)
-			       (slime-stream-p (sb-pretty::pretty-stream-target stream)))))
+		      (and (typep stream (find-symbol "PRETTY-STREAM" 'sb-pretty))
+                           (find-symbol "ENQUEUE-ANNOTATION" 'sb-pretty)
+                           (not *use-dedicated-output-stream*)
+                           (slime-stream-p (sb-pretty::pretty-stream-target stream))))
 		    #+allegro
 		    (and (typep stream 'excl:xp-simple-stream)
 			 (slime-stream-p (excl::stream-output-handle stream)))
@@ -210,6 +208,9 @@ Two special return values:
 (defun presenting-object-1 (object stream continue)
   "Uses the bridge mechanism with two messages >id and <id. The first one
 says that I am starting to print an object with this id. The second says I am finished"
+  ;; this declare special is to let the compiler know that *record-repl-results* will eventually be
+  ;; a global special, even if it isn't when this file is compiled/loaded.
+  (declare (special *record-repl-results*))
   (let ((slime-stream-p 
 	 (and *record-repl-results* (slime-stream-p stream))))
     (if slime-stream-p

@@ -98,12 +98,16 @@ text search.")
 If POSITION is given, set the STREAM's file position first."
   (when position
     (file-position stream position))
-  #+SBCL (skip-comments-and-whitespace stream)
+  #+sbcl (skip-comments-and-whitespace stream)
   (read-upto-n-chars stream *source-snippet-size*))
+
+(defun read-snippet-from-string (string &optional position)
+  (with-input-from-string (s string)
+    (read-snippet s position)))
 
 (defun skip-comments-and-whitespace (stream)
   (case (peek-char nil stream)
-    ((#\Space #\Tab #\Newline #\Linefeed)
+    ((#\Space #\Tab #\Newline #\Linefeed #\Page)
      (read-char stream)
      (skip-comments-and-whitespace stream))
     (#\;
