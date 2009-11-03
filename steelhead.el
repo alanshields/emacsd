@@ -17,6 +17,7 @@
                   (c . 0)
                   ; next-line function args
 ;                  (arglist-cont-nonempty . +)
+                  (case-label . +)
                   ))
                t)
                
