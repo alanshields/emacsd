@@ -201,6 +201,110 @@
 
 (put 'narrow-to-region 'disabled nil)
 
+(defun remove-leading-and-trailing-whitespace (start end)
+  (interactive "r")
+  (save-excursion
+    (save-restriction
+      (narrow-to-region start end)
+      (goto-char (point-max))
+      ; trim trailing whitespace
+      (skip-syntax-backward " ")
+      (delete-region (point) (point-max))
+      ; trim leading whitespace
+      (goto-char (point-min))
+      (skip-syntax-forward " ")
+      (delete-region (point-min) (point)))))
+
+(defun my-chomp (str)
+  "..."
+  (save-excursion
+    (with-temp-buffer
+      (insert str)
+      (remove-leading-and-trailing-whitespace (point-min) (point-max))
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
+(defun length-after-tab-expansion (str)
+  (let ((len 0))
+    (dotimes (i (length str))
+      (if (= ?\t (elt str i))
+          (setq len (+ len tab-width))
+        (setq len (+ len 1))))
+    len))
+
+(defun align-table (start end)
+  "Aligns text in the region in a table format split by ,"
+  (interactive "r")
+  (save-excursion
+    (save-restriction
+      (narrow-to-region start end)
+      (goto-char (point-min))
+      (flet ((split-this-line ()
+                              (save-excursion
+                                (beginning-of-line)
+                                (split-string (buffer-substring-no-properties (point) (line-end-position)) "," nil)))
+             (trimmed-lengths (list-of-columns) ; first column is not trimmed
+                              (let ((accum nil))
+                                (dotimes (i (length list-of-columns))
+                                  (let ((len (if (zerop i)
+                                                 (length-after-tab-expansion (elt list-of-columns i))
+                                               (length (my-chomp (elt list-of-columns i))))))
+                                    (setq accum (cons len accum))))
+                                (reverse accum))))
+        (let ((all-lengths (let ((lengths (list)))
+                             (save-excursion
+                               (while (not (= (point-max) (point)))
+                                 (setq lengths (cons
+                                                (trimmed-lengths (split-this-line))
+                                                lengths))
+                                 (next-line)))
+                             lengths)))
+          (let ((max-lengths (reduce
+                              (lambda (list-a list-b)
+                                (mapcar (lambda (nth)
+                                          (max (or (elt list-a nth) 0)
+                                               (or (elt list-b nth) 0)))
+                                        (number-sequence 0 (max 0
+                                                                (1- (max (length list-a)
+                                                                         (length list-b)))))))
+                              all-lengths)))
+            (save-excursion
+              (goto-char (point-min))
+              (let ((first-line-p 1))
+                (while (not (= (point-max) (point)))
+                                        ;(when (not first-line-p)
+                                        ;1) ; indent
+                  (let ((column-number 0))
+                    (while (search-forward "," (line-end-position) t)
+                      (when (not (zerop column-number)) ; first column is only indented, not trimmed
+                        (let ((column-starting-position (save-excursion
+                                                          (goto-char (1- (point)))
+                                                          (search-backward "," (line-beginning-position) t)
+                                                          (1+ (point))))
+                              (column-ending-position (1- (point))))
+                          (remove-leading-and-trailing-whitespace column-starting-position column-ending-position)
+                          (save-excursion
+                            (let ((column-starting-position (save-excursion
+                                                              (goto-char (1- (point)))
+                                                              (search-backward "," (line-beginning-position) t)
+                                                              (1+ (point))))
+                                  (column-ending-position (1- (point))))
+                              (let ((cur-length (- column-ending-position column-starting-position)))
+                                (let ((indent-deficit (+ 1 ; 1 mandatory padding
+                                                         (- (elt max-lengths column-number) cur-length) ; difference
+                                                         (if (= 1 column-number)
+                                                             (save-excursion
+                                                               (goto-char (line-beginning-position))
+                                                               (search-forward "," (line-end-position) t)
+                                                               (- (elt max-lengths 0)
+                                                                  (length-after-tab-expansion (buffer-substring-no-properties (1- (point)) (line-beginning-position)))))
+                                                           0))))
+                                  (goto-char column-starting-position)
+                                  (dotimes (i indent-deficit)
+                                    (insert " "))))))))
+                      (setq column-number (1+ column-number))))
+                  (setq first-line-p 0)
+                  (forward-line))))))))))
+
 
 ;; Steelhead specific configurations
 (when (file-exists-p "~/steelhead")
