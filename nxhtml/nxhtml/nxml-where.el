@@ -49,12 +49,16 @@
 ;; then enter the text in that file's own buffer.
 
 (eval-when-compile (require 'cl))
-(eval-when-compile (require 'mumamo))
-(eval-when-compile
-  (unless (featurep 'nxhtml-autostart)
-    (let ((efn (expand-file-name "../autostart.el")))
-      (load efn))
-    (require 'nxml-mode)))
+(eval-when-compile (require 'mumamo nil t))
+(eval-when-compile (require 'nxml-mode nil t))
+;;(eval-when-compile (require 'ourcomments-util nil t))
+(declare-function nxhtml-validation-header-mode "nxhtml-mode")
+
+;; (eval-when-compile
+;;   (unless (featurep 'nxhtml-autostart)
+;;     (let ((efn (expand-file-name "../autostart.el")))
+;;       (load efn))
+;;     (require 'nxml-mode)))
 
 (defun nxml-where-error-message (format-string &rest args)
   (with-current-buffer (get-buffer-create "*Messages*")
@@ -106,51 +110,76 @@ This is a list where the records have the form
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Custom options
 
+;;;###autoload
 (defgroup nxml-where nil
   "Customization group for nxml-where."
   :group 'nxhtml
   :group 'nxml)
 
-(define-toggle nxml-where-only-inner nil
+;;(define-toggle nxml-where-only-inner nil
+(define-minor-mode nxml-where-only-inner
   "Mark only inner-most tag."
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (fboundp 'nxml-where-update-buffers)
-           (nxml-where-update-buffers)))
-  :group 'nxml-where)
+  :global t
+  :group 'nxml-where
+  (when (fboundp 'nxml-where-update-buffers)
+    (nxml-where-update-buffers)))
 
-(define-toggle nxml-where-header t
+(defun nxml-where-only-inner-toggle ()
+  "Toggle `nxml-where-only-inner'."
+  (interactive)
+  (nxml-where-only-inner (if nxml-where-only-inner -1 1)))
+
+;;(define-toggle nxml-where-header t
+(define-minor-mode nxml-where-header
   "Show header with XML-path if non-nil."
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (fboundp 'nxml-where-update-buffers)
-           (nxml-where-update-buffers)))
-  :group 'nxml-where)
+  :global t
+  :init-value t
+  :group 'nxml-where
+  (when (fboundp 'nxml-where-update-buffers)
+    (nxml-where-update-buffers)))
 
-(define-toggle nxml-where-tag+id t
+(defun nxml-where-header-toggle ()
+  "Toggle `nxml-where-header'."
+  (interactive)
+  (nxml-where-header (if nxml-where-header -1 1)))
+
+;;(define-toggle nxml-where-tag+id t
+(define-minor-mode nxml-where-tag+id
   "Show tags + id in path if non-nil.
 If nil show only tag names."
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (fboundp 'nxml-where-update-buffers)
-           (nxml-where-update-buffers)))
-  :group 'nxml-where)
+  :global t
+  :init-value t
+  :group 'nxml-where
+  (when (fboundp 'nxml-where-update-buffers)
+    (nxml-where-update-buffers)))
 
-(define-toggle nxml-where-marks t
+(defun nxml-where-tag+id-toggle ()
+  "Toggle `nxml-where-tag+id'."
+  (interactive)
+  (nxml-where-tag+id (if nxml-where-tag+id -1 1)))
+
+;;(define-toggle nxml-where-marks t
+(define-minor-mode nxml-where-marks
   "Show marks in buffer for XML-path if non-nil."
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (fboundp 'nxml-where-update-buffers)
-           (nxml-where-update-buffers)))
-  :group 'nxml-where)
+  :global t
+  :init-value t
+  :group 'nxml-where
+  (when (fboundp 'nxml-where-update-buffers)
+    (nxml-where-update-buffers)))
 
-(define-toggle nxml-where-only-tags-with-id t
-  "Show only tags with id in the header line."
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (fboundp 'nxml-where-update-buffers)
-           (nxml-where-update-buffers)))
-  :group 'nxml-where)
+(defun nxml-where-marks-toggle ()
+  "Toggle `nxml-where-marks'."
+  (interactive)
+  (nxml-where-marks (if nxml-where-marks -1 1)))
+
+;; Fix-me: implement this?
+;; (define-toggle nxml-where-only-tags-with-id t
+;;   "Show only tags with id in the header line."
+;;   :set (lambda (sym val)
+;;          (set-default sym val)
+;;          (when (fboundp 'nxml-where-update-buffers)
+;;            (nxml-where-update-buffers)))
+;;   :group 'nxml-where)
 
 (defface nxml-where-marking
   '((t (:inherit secondary-selection)))
@@ -206,19 +235,49 @@ If nil show only tag names."
   ;;(nxml-where-restart-update)
   (add-hook 'post-command-hook 'nxml-where-restart-update nil t))
 
+(defcustom nxml-where-mozadd-outline-style "1px solid green"
+  "CSS style for `nxml-where-mode' path when shown in Firefox.
+`mozadd-send-buffer
+This is added as
+
+  style=\"outline: THIS-STYLE\""
+  :type 'string
+  :group 'mozadd)
+
+(defun nxml-where-mozadd-send-buffer-hook-fun (mozadd-points)
+  "Add outlines to Firefox.
+Added to `mozadd-send-buffer-hook' by `nxml-where-mode'."
+  (let ((my-points (symbol-value mozadd-points)))
+    ;; If nxml-where-mode is on add corresponding outline style.
+    (when (and (boundp 'nxml-where-mode) nxml-where-mode)
+      (mapc (lambda (rec)
+              (let ((ovl (nth 3 rec)))
+                (when (/= ?/ (1+ (char-after (overlay-start ovl))))
+                  (let ((new-rec `(,(1- (overlay-end ovl))
+                                   ,nxml-where-mozadd-outline-style)))
+                    (setq my-points (cons new-rec my-points))))))
+            nxml-where-path)
+      (set mozadd-points my-points)
+      )))
+
 (defun nxml-where-mode-start ()
   ;;(message "START")
-  (unless (nxml-where-is-nxml)
-    (error "Can't display XML path since major mode is not nxml-mode child."))
-  (add-hook 'after-change-major-mode-hook 'nxml-where-turn-off-unless-nxml nil t)
-  (add-hook 'after-change-functions 'nxml-where-after-change nil t)
-  (nxml-where-save-header-line-format)
-  (nxml-where-setup-updating))
+  (if (not (nxml-where-is-nxml))
+      (progn
+        (message "Can't display XML path since major mode is not nxml-mode child.")
+        nil)
+    (add-hook 'after-change-major-mode-hook 'nxml-where-turn-off-unless-nxml nil t)
+    (add-hook 'after-change-functions 'nxml-where-after-change nil t)
+    (add-hook 'mozadd-send-buffer-hook 'nxml-where-mozadd-send-buffer-hook-fun nil t)
+    (nxml-where-save-header-line-format)
+    (nxml-where-setup-updating)
+    t))
 
 (defun nxml-where-mode-stop ()
   ;;(message "STOP")
   (remove-hook 'after-change-major-mode-hook 'nxml-where-turn-off-unless-nxml t)
   (remove-hook 'after-change-functions 'nxml-where-after-change t)
+  (remove-hook 'mozadd-send-buffer-hook 'nxml-where-mozadd-send-buffer-hook-fun t)
   (nxml-where-stop-updating)
   (nxml-where-unmark-forward-element)
   (nxml-where-restore-header-line-format)
@@ -231,12 +290,12 @@ If nil show only tag names."
 
 ;;;###autoload
 (define-minor-mode nxml-where-mode
-  "Shows path in mode line."
+  "Shows path in header line."
   :global nil
   :group 'nxml-where
   (if nxml-where-mode
       ;;Turn it on
-      (nxml-where-mode-start)
+      (setq nxml-where-mode (nxml-where-mode-start))
     ;; Turn it off
     (nxml-where-mode-stop)
     ))

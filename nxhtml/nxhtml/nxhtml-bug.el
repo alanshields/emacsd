@@ -44,7 +44,9 @@
 ;;
 ;;; Code:
 
-(eval-when-compile (require 'nxhtml-menu))
+(require 'nxhtml-base)
+(eval-and-compile (require 'nxhtml-menu nil t))
+(declare-function nxhtml-validation-header-mode "nxhtml-mode")
 
 (require 'sendmail)
 
@@ -155,7 +157,7 @@
         (fill-region here (point))
         (setq here (point))
         )
-      (print-help-return-message))))
+      (with-no-warnings (print-help-return-message)))))
 
 (defun nxhtml-report-bug-by-mail (topic)
   "Report a bug by mail.

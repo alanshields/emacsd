@@ -2,14 +2,15 @@
 ;;
 ;; Author: Lennart Borgman <lennart dot borgman at gmail dot com>
 ;; Created: Wed Feb 21 2007
-(defconst ourcomments-util:version "0.25") ;;Version:
-;; Last-Updated: 2009-08-04 Tue
+(defconst ourcomments-util:version "0.30") ;;Version:
+;; Last-Updated: 2010-05-29 Sat
 ;; Keywords:
 ;; Compatibility: Emacs 22
 ;;
 ;; Features that might be required by this library:
 ;;
-;;   None
+;;   `backquote', `bytecomp', `cus-edit', `cus-face', `cus-load',
+;;   `cus-start', `wid-edit'.
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -44,12 +45,43 @@
 ;;
 ;;; Code:
 
+;;(defconst ourcomments-load-time-start (float-time))
+;;(message " ourcomments a %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 (eval-when-compile (require 'apropos))
+(eval-when-compile (require 'bookmark))
 (eval-when-compile (require 'cl))
 (eval-when-compile (require 'grep))
 (eval-when-compile (require 'ido))
-;;(eval-when-compile (require 'mumamo))
+(eval-when-compile (require 'org))
 (eval-when-compile (require 'recentf))
+(eval-when-compile (require 'uniquify))
+
+(declare-function 'ido-mode "ido" '(&optional args) t)
+
+(eval-when-compile (require 'cus-edit))
+;;(message " ourcomments b %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+;; (ourcomments-indirect-fun 'html-mumamo)
+;; (ourcomments-indirect-fun 'html-mumamo-mode)
+;;;###autoload
+(defun ourcomments-indirect-fun (fun)
+  "Get the alias symbol for function FUN if any."
+  ;; This code is from `describe-function-1'.
+  (when (and (symbolp fun)
+             (functionp fun))
+    (let ((def (symbol-function fun)))
+      (when (symbolp def)
+        (while (and (fboundp def)
+                    (symbolp (symbol-function def)))
+          (setq def (symbol-function def)))
+        def))))
+
+(defun ourcomments-goto-line (line)
+  "A version of `goto-line' for use in elisp code."
+  (save-restriction
+    (widen)
+    (goto-char (point-min))
+    (forward-line (1- line))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Popups etc.
@@ -106,6 +138,35 @@ To create a menu item something similar to this can be used:
       \(list 'menu-item \"Toggle nice SYMBOL\"
             'SYMBOL-toggle
             :button '(:toggle . SYMBOL)))"
+  (declare
+   (doc-string 3)
+   (debug t))
+  (let* ((SYMBOL-toggle (intern (concat (symbol-name symbol) "-toggle")))
+         (SYMBOL-name (symbol-name symbol))
+         (var-doc doc)
+         (fun-doc (concat "Toggles the \(boolean) value of `"
+                          SYMBOL-name
+                          "'.\n"
+                          "For how to set it permanently see this variable.\n"
+                          )))
+    (let ((var (append `(defcustom ,symbol ,value ,var-doc)
+                args
+                nil))
+          (fun `(defun ,SYMBOL-toggle ()
+                  ,fun-doc
+                  (interactive)
+                  (customize-set-variable (quote ,symbol) (not ,symbol)))))
+      ;;(message "\nvar=%S\nfun=%S\n" var fun)
+      ;; Fix-me: I am having problems with this one, see
+      ;; http://lists.gnu.org/archive/html/help-gnu-emacs/2009-12/msg00608.html
+      `(progn ,var ,fun)
+    )))
+
+;;(macroexpand '(define-toggle my-toggle t "doc" :tag "Short help" :group 'popcmp))
+;;(macroexpand-all (define-toggle my-toggle t "doc" :tag "Short help" :group 'popcmp))
+
+;;;###autoload
+(defmacro define-toggle-old (symbol value doc &rest args)
   (declare (doc-string 3))
   (list
    'progn
@@ -343,34 +404,66 @@ To create a menu item something similar to this can be used:
 
 (defun with-unfilling (fn)
   "Unfill using the fill function FN."
-  (let ((fill-column 10000000)) (call-interactively fn)))
+  (let ((fill-column (1+ (point-max)))) (call-interactively fn)))
 
+(defvar fill-dwim-state nil)
+(defvar fill-dwim-mark nil)
+
+;;;###autoload
+(defun fill-dwim (arg)
+  "Fill or unfill paragraph or region.
+With prefix ARG fill only current line."
+  (interactive "P")
+  (or arg
+      (not fill-dwim-mark)
+      (equal (point-marker) fill-dwim-mark)
+      (setq fill-dwim-state nil))
+  (if mark-active
+      ;; This avoids deactivating the mark
+      (progn
+        (if fill-dwim-state
+            (call-interactively 'unfill-region)
+          (call-interactively 'fill-region))
+        (setq deactivate-mark nil))
+    (if arg
+        (fill-region (line-beginning-position) (line-end-position))
+      (if fill-dwim-state
+          (call-interactively 'unfill-paragraph)
+        (call-interactively 'fill-paragraph))))
+  (setq fill-dwim-mark (copy-marker (point)))
+  (unless arg
+    (setq fill-dwim-state (not fill-dwim-state))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Widgets
 
-
-;; (rassq 'genshi-nxhtml-mumamo-mode mumamo-defined-turn-on-functions)
-;; (major-modep 'nxhtml-mode)
-;; (major-modep 'nxhtml-mumamo-mode)
-;; (major-modep 'jsp-nxhtml-mumamo-mode)
-;; (major-modep 'asp-nxhtml-mumamo-mode)
-;; (major-modep 'django-nxhtml-mumamo-mode)
-;; (major-modep 'eruby-nxhtml-mumamo-mode)
-;; (major-modep 'eruby-nxhtml-mumamo-mode)
-;; (major-modep 'smarty-nxhtml-mumamo-mode)
-;; (major-modep 'embperl-nxhtml-mumamo-mode)
-;; (major-modep 'laszlo-nxml-mumamo-mode)
-;; (major-modep 'genshi-nxhtml-mumamo-mode)
-;; (major-modep 'javascript-mode)
-;; (major-modep 'espresso-mode)
-;; (major-modep 'css-mode)
+;;;###autoload
+(defun ourcomments-mark-whole-buffer-or-field ()
+  "Mark whole buffer or editable field at point."
+  (interactive)
+  (let* ((field (widget-field-at (point)))
+         (from (when field (widget-field-start field)))
+         (to   (when field (widget-field-end field)))
+         (size (when field (widget-get field :size))))
+    (if (not field)
+        (mark-whole-buffer)
+      (while (and size
+                  (not (zerop size))
+                  (> to from)
+                  (eq (char-after (1- to)) ?\s))
+        (setq to (1- to)))
+      (push-mark (point))
+      (push-mark from nil t)
+      (goto-char to))))
 
 ;;;###autoload
 (defun major-or-multi-majorp (value)
-  (or (mumamo-multi-major-modep value)
+  "Return t if VALUE is a major or multi major mode function."
+  (or (and (fboundp 'mumamo-multi-major-modep)
+           (fboundp (mumamo-multi-major-modep value)))
       (major-modep value)))
 
+;; Fix-me: This might in the future be defined in Emacs.
 ;;;###autoload
 (defun major-modep (value)
   "Return t if VALUE is a major mode function."
@@ -405,29 +498,31 @@ To create a menu item something similar to this can be used:
                            php-mode
                            ))
                    (and (intern-soft (concat sym-name "-hook"))
-                        (boundp (intern-soft (concat sym-name "-hook"))))
+                        ;; This fits `define-derived-mode'
+                        (get (intern-soft (concat sym-name "-hook")) 'variable-documentation))
                    (progn (message "Not a major mode: %s" value)
                           ;;(sit-for 4)
                           nil)
                    ))
       t)))
 
-;;;###autoload
-(define-widget 'major-mode-function 'function
-  "A major mode lisp function."
-  :complete-function (lambda ()
-                       (interactive)
-                       (lisp-complete-symbol 'major-or-multi-majorp))
-  :prompt-match 'major-or-multi-majorp
-  :prompt-history 'widget-function-prompt-value-history
-  :match-alternatives '(major-or-multi-majorp)
-  :validate (lambda (widget)
-              (unless (major-or-multi-majorp (widget-value widget))
-                (widget-put widget :error (format "Invalid function: %S"
-                                                  (widget-value widget)))
-                widget))
-  :value 'fundamental-mode
-  :tag "Major mode function")
+;; (rassq 'genshi-nxhtml-mumamo-mode mumamo-defined-turn-on-functions)
+;; (major-modep 'nxhtml-mode)
+;; (major-modep 'nxhtml-mumamo-mode)
+;; (major-modep 'jsp-nxhtml-mumamo-mode)
+;; (major-modep 'gsp-nxhtml-mumamo-mode)
+;; (major-modep 'asp-nxhtml-mumamo-mode)
+;; (major-modep 'django-nxhtml-mumamo-mode)
+;; (major-modep 'eruby-nxhtml-mumamo-mode)
+;; (major-modep 'eruby-nxhtml-mumamo-mode)
+;; (major-modep 'smarty-nxhtml-mumamo-mode)
+;; (major-modep 'embperl-nxhtml-mumamo-mode)
+;; (major-modep 'laszlo-nxml-mumamo-mode)
+;; (major-modep 'genshi-nxhtml-mumamo-mode)
+;; (major-modep 'javascript-mode)
+;; (major-modep 'espresso-mode)
+;; (major-modep 'css-mode)
+;; (major-modep 'js-mode)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -435,16 +530,20 @@ To create a menu item something similar to this can be used:
 
 ;; Changed from move-beginning-of-line to beginning-of-line to support
 ;; physical-line-mode.
+;; Fix-me: use end-of-visual-line etc.
 ;;;###autoload
 (defun ourcomments-move-beginning-of-line(arg)
   "Move point to beginning of line or indentation.
 See `beginning-of-line' for ARG.
 
 If `line-move-visual' is non-nil then the visual line beginning
-is first tried."
+is first tried.
+
+If in a widget field stay in that."
   (interactive "p")
   (let ((pos (point))
-        vis-pos)
+        vis-pos
+        (field (widget-field-at (point))))
     (when line-move-visual
       (line-move-visual -1 t)
       (beginning-of-line)
@@ -462,8 +561,13 @@ is first tried."
       (if (= 0 (current-column))
           (skip-chars-forward " \t")
         (backward-char)
-        (beginning-of-line)))))
+        (beginning-of-line)))
+    (when (and field
+               (< (point) (widget-field-start field)))
+      (goto-char (widget-field-start field)))))
 (put 'ourcomments-move-beginning-of-line 'CUA 'move)
+
+;;(message " ourcomments c %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;###autoload
 (defun ourcomments-move-end-of-line(arg)
@@ -859,244 +963,12 @@ what they will do ;-)."
 ;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Wrapping
-
-;;;###autoload
-(defcustom wrap-to-fill-left-marg nil
-  "Left margin handling for `wrap-to-fill-column-mode'.
-Used by `wrap-to-fill-column-mode'. If nil then center the
-display columns. Otherwise it should be a number which will be
-the left margin."
-  :type '(choice (const :tag "Center" nil)
-                 (integer :tag "Left margin"))
-  :group 'convenience)
-(make-variable-buffer-local 'wrap-to-fill-left-marg)
-
-(defvar wrap-to-fill-left-marg-use 0)
-(make-variable-buffer-local 'wrap-to-fill-left-marg-use)
-(put 'wrap-to-fill-left-marg-use 'permanent-local t)
-
-;;;###autoload
-(defcustom wrap-to-fill-left-marg-modes
-  '(text-mode
-    fundamental-mode)
-  "Major modes where `wrap-to-fill-left-margin' may be nil."
-  :type '(repeat commandp)
-  :group 'convenience)
-
-(defun wrap-to-fill-set-prefix (min max)
-  ;;(wrap-to-fill-set-prefix-1 min max)
-  )
-
-(defun wrap-to-fill-set-prefix-1 (min max)
-  "Set `wrap-prefix' text property from point MIN to MAX."
-  ;; Fix-me: If first word gets wrapped we have a problem.
-  ;;(message "wrap-to-fill-set-prefix here")
-  (let ((here (point))
-        beg-pos
-        end-pos
-        ind-str
-        max-word-len
-        (inhibit-field-text-motion t)
-        )
-    (goto-char min)
-    (forward-line 0)
-    (when (< (point) min) (forward-line))
-    (mumamo-with-buffer-prepared-for-jit-lock
-     (while (and (<= (point) max)
-                 (< (point) (point-max)))
-       (setq beg-pos (point))
-       (setq end-pos (line-end-position))
-       (when (equal (get-text-property beg-pos 'wrap-prefix)
-                    (get-text-property beg-pos 'wrap-to-fill-prefix))
-         (skip-chars-forward "[:blank:]")
-         (setq ind-str (buffer-substring-no-properties beg-pos (point)))
-         (setq max-word-len
-               (apply
-                'max
-                0
-                (mapcar (lambda (word)
-                              (length word))
-                            (split-string
-                             (buffer-substring-no-properties
-                              (point) end-pos)))))
-         ;;(message "max-word-len=%s, %s, %s" max-word-len (length ind-str) (buffer-substring-no-properties (point) end-pos))
-         (unless (< fill-column (+ max-word-len
-                                   ;;(current-indentation)
-                                   (length ind-str)
-                                   5 ;; Fix-me: From where?? This is the diff between the usable area and fill-column ...
-                                   ))
-           (put-text-property beg-pos end-pos 'wrap-prefix ind-str)
-           (put-text-property beg-pos end-pos 'wrap-to-fill-prefix ind-str)))
-       (forward-line)))
-    (goto-char here)))
-
-(defvar wrap-to-fill-after-change-range nil)
-
-(defun wrap-to-fill-after-change (min max old-len)
-  "For `after-change-functions'.
-See the hook for MIN, MAX and OLD-LEN."
-  (let ((here (point))
-        (inhibit-field-text-motion t))
-    (goto-char min)
-    (setq min (line-beginning-position))
-    (goto-char max)
-    (setq max (line-end-position))
-    ;;(wrap-to-fill-set-prefix min max)
-    (wrap-to-fill-save-min-max min max)
-    ))
-
-(defun wrap-to-fill-save-min-max (min max)
-  (let* ((old-min (car wrap-to-fill-after-change-range))
-         (old-max (cdr wrap-to-fill-after-change-range))
-         (new-min (if old-min (min old-min min) min))
-         (new-max (if old-max (max old-max max) max)))
-    (setq wrap-to-fill-after-change-range (cons new-min new-max))))
-
-(defun wrap-to-fill-post-command ()
-  (let* ((min (car wrap-to-fill-after-change-range))
-         (max (cdr wrap-to-fill-after-change-range)))
-    (setq wrap-to-fill-after-change-range nil)
-    (wrap-to-fill-set-prefix min max)))
-
-(defun wrap-to-fill-scroll-fun (window start-pos)
-  "For `window-scroll-functions'.
-See the hook for WINDOW and START-POS."
-  (let ((min (or start-pos (window-start window)))
-        (max (window-end window t)))
-    (wrap-to-fill-save-min-max min max)))
-    ;;(wrap-to-fill-set-prefix min max)))
-
-(defun wrap-to-fill-wider ()
-  "Increase `fill-column' with 10."
-  (interactive)
-  (setq fill-column (+ fill-column 10))
-  (wrap-to-fill-set-values))
-
-(defun wrap-to-fill-narrower ()
-  "Decrease `fill-column' with 10."
-  (interactive)
-  (setq fill-column (- fill-column 10))
-  (wrap-to-fill-set-values))
-
-(defvar wrap-to-fill-column-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map [(control ?c) right] 'wrap-to-fill-wider)
-    (define-key map [(control ?c) left] 'wrap-to-fill-narrower)
-    map))
-
-;;;###autoload
-(define-minor-mode wrap-to-fill-column-mode
-  "Use `fill-column' display columns in buffer windows.
-By default the display columns are centered, but see the option
-`wrap-to-fill-left-marg'.
-
-Note 1: When turning this on `visual-line-mode' is also turned on. This
-is not reset when turning off this mode.
-
-Note 2: The text property `wrap-prefix' is set by this mode to
-indent continuation lines.  This is not recorded in the undo
-list.
-
-Key bindings added by this minor mode:
-
-\\{wrap-to-fill-column-mode-map}"
-  ;; Fix-me: make the `wrap-prefix' behavior an option.
-  :lighter " WrapFill"
-  :group 'convenience
-  ;;(message "wrap-to-fill-column-mode here %s" wrap-to-fill-column-mode)
-  (if wrap-to-fill-column-mode
-      (let* ((win (get-buffer-window (current-buffer)))
-             (win-margs (when win (window-margins win))))
-        (when win-margs
-          (setq wrap-to-fill-left-marg (or (car win-margs)
-                                           wrap-to-fill-left-marg)))
-        (setq wrap-to-fill-left-marg-use wrap-to-fill-left-marg)
-        (unless (or wrap-to-fill-left-marg-use
-                    (memq major-mode wrap-to-fill-left-marg-modes))
-          (setq wrap-to-fill-left-marg-use
-                (default-value 'wrap-to-fill-left-marg-use)))
-        (add-hook 'window-configuration-change-hook 'wrap-to-fill-set-values nil t)
-        (add-hook 'after-change-functions 'wrap-to-fill-after-change nil t)
-        (add-hook 'window-scroll-functions 'wrap-to-fill-scroll-fun nil t)
-        (add-hook 'post-command-hook 'wrap-to-fill-post-command nil t)
-        ;;(add-hook 'post-command-hook window-scroll-functions 'wrap-to-fill-scroll-fun nil t)
-        (if (fboundp 'visual-line-mode)
-            (visual-line-mode 1)
-          (longlines-mode 1))
-        (dolist (window (get-buffer-window-list (current-buffer)))
-          (wrap-to-fill-scroll-fun window nil)))
-    (remove-hook 'window-configuration-change-hook 'wrap-to-fill-set-values t)
-    (remove-hook 'after-change-functions 'wrap-to-fill-after-change t)
-    (remove-hook 'window-scroll-functions 'wrap-to-fill-scroll-fun t)
-    (if (fboundp 'visual-line-mode)
-        (visual-line-mode -1)
-      (longlines-mode -1))
-    (let ((here (point))
-          (inhibit-field-text-motion t)
-          beg-pos
-          end-pos)
-      (mumamo-with-buffer-prepared-for-jit-lock
-       (save-restriction
-         (widen)
-         (goto-char (point-min))
-         (while (< (point) (point-max))
-           (setq beg-pos (point))
-           (setq end-pos (line-end-position))
-           (when (equal (get-text-property beg-pos 'wrap-prefix)
-                        (get-text-property beg-pos 'wrap-to-fill-prefix))
-             (remove-list-of-text-properties
-              beg-pos end-pos
-              '(wrap-prefix)))
-           (forward-line))
-         (remove-list-of-text-properties
-          (point-min) (point-max)
-          '(wrap-to-fill-prefix)))
-       (goto-char here))))
-  (wrap-to-fill-set-values))
-(put 'wrap-to-fill-column-mode 'permanent-local t)
-
-;; Fix-me: There is a confusion between buffer and window margins
-;; here. Also the doc says that left-margin-width and dito right may
-;; be nil. However they seem to be 0 by default, but when displaying a
-;; buffer in a window then window-margins returns (nil).
-(defun wrap-to-fill-set-values ()
-  (condition-case err
-      (wrap-to-fill-set-values-1)
-    (error (message "ERROR wrap-to-fill-set-values-1: %s" (error-message-string err)))))
-
-(defun wrap-to-fill-set-values-1 ()
-  "Use `fill-column' display columns in buffer windows."
-  ;;(message "wrap-to-fill-set-values window-configuration-change-hook=%s, wrap-to-fill-column-mode=%s, cb=%s" window-configuration-change-hook wrap-to-fill-column-mode (current-buffer))
-  (let ((buf-windows (get-buffer-window-list (current-buffer))))
-    ;;(message "buf-windows=%s" buf-windows)
-    (dolist (win buf-windows)
-      (if wrap-to-fill-column-mode
-          (let* ((edges (window-edges win))
-                 (win-width (- (nth 2 edges) (nth 0 edges)))
-                 (extra-width (- win-width fill-column))
-                 (left-marg (if wrap-to-fill-left-marg-use
-                                wrap-to-fill-left-marg-use
-                              (- (/ extra-width 2) 1)))
-                 (right-marg (- win-width fill-column left-marg))
-                 (win-margs (window-margins win))
-                 (old-left (or (car win-margs) 0))
-                 (old-right (or (cdr win-margs) 0)))
-            ;;(message "left-marg=%s, right-marg=%s, old-left=%s, old-right=%s" left-marg right-marg old-left old-right)
-            (unless (> left-marg 0) (setq left-marg 0))
-            (unless (> right-marg 0) (setq right-marg 0))
-            (unless (and (= old-left left-marg)
-                         (= old-right right-marg))
-              (set-window-margins win left-marg right-marg)))
-        (set-window-buffer win (current-buffer))))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Fringes.
 
 (defvar better-bottom-angles-defaults nil)
 (defun better-fringes-bottom-angles (on)
   ;;(bottom bottom-left-angle bottom-right-angle top-right-angle top-left-angle)
+  ;;(message " better-fringes-bottom a %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (if (not on)
       (when better-bottom-angles-defaults
         (set-default 'fringe-indicator-alist better-bottom-angles-defaults))
@@ -1110,9 +982,12 @@ Key bindings added by this minor mode:
           ;;(indicators (copy-list fringe-indicator-alist)))
           (indicators (copy-sequence fringe-indicator-alist)))
       (setq indicators (assq-delete-all 'bottom indicators))
-      (set-default 'fringe-indicator-alist (cons better indicators)))))
+      (set-default 'fringe-indicator-alist (cons better indicators))))
+  ;;(message " better-fringes-bottom b %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
+  )
 
 (defun better-fringes-faces (face face-important)
+  ;;(message " better-fringes-faces a %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (dolist (bitmap '(bottom-left-angle
                     bottom-right-angle
                     top-left-angle
@@ -1126,12 +1001,15 @@ Key bindings added by this minor mode:
                     left-bracket right-bracket
                     empty-line))
     (set-fringe-bitmap-face bitmap face))
+  ;;(message " better-fringes-faces b %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (dolist (bitmap '(right-triangle
                     question-mark))
-    (set-fringe-bitmap-face bitmap face-important)))
+    (set-fringe-bitmap-face bitmap face-important))
+  ;;(message " better-fringes-faces c %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
+  )
 
 (defface better-fringes-bitmap
-  '((t (:foreground "khaki")))
+  '((t (:foreground "dark khaki")))
   "Face for bitmap fringes."
   :group 'better-fringes
   :group 'nxhtml)
@@ -1155,32 +1033,231 @@ Key bindings added by this minor mode:
     (better-fringes-faces nil nil)
     (better-fringes-bottom-angles nil)))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Copy+paste
+
+;; After an idea from andrea on help-gnu-emacs
+
+(defvar ourcomments-copy+paste-point nil)
+
+;;(message " ourcomments d %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+;;(global-set-key [(control ?c) ?y] 'ourcomments-copy+paste-set-point)
+;;;###autoload
+(defun ourcomments-copy+paste-set-point ()
+  "Set point for copy+paste here.
+Enable temporary minor mode `ourcomments-copy+paste-mode'.
+However if point for copy+paste already is set then cancel it and
+disable the minor mode.
+
+The purpose of this command is to make it easy to grab a piece of
+text and paste it at current position.  After this command you
+should select a piece of text to copy and then call the command
+`ourcomments-copy+paste'."
+  (interactive)
+  (if ourcomments-copy+paste-point
+      (ourcomments-copy+paste-mode -1)
+    (setq ourcomments-copy+paste-point (list (copy-marker (point))
+                                             (selected-window)
+                                             (current-frame-configuration)
+                                             ))
+    (ourcomments-copy+paste-mode 1)
+    (let ((key (where-is-internal 'ourcomments-copy+paste))
+          (ckeys (key-description (this-command-keys))))
+      (setq key (if key (key-description (car key))
+                  "M-x ourcomments-copy+paste"))
+      (when (> (length ckeys) 12)
+        (setq ckeys "this command"))
+      (message "Paste point set; select region and do %s to copy+paste (or cancel with %s)" key ckeys))))
+
+(defvar ourcomments-copy+paste-mode-map
+  (let ((map (make-sparse-keymap)))
+    ;; Bind the copy+paste command to C-S-v which reminds of cua-paste
+    ;; binding and is hopefully not bound.
+    (define-key map [(control shift ?v)] 'ourcomments-copy+paste)
+    map))
+
+(define-minor-mode ourcomments-copy+paste-mode
+  "Temporary mode for copy+paste.
+This minor mode is enabled by `ourcomments-copy+paste-set-point'.
+
+When this mode is active there is a key binding for
+`ourcomments-copy+paste':
+\\<ourcomments-copy+paste-mode-map>
+\\[ourcomments-copy+paste]
+
+You should not turn on this minor mode yourself.  It is turned on
+by `ourcomments-copy+paste-set-point'.  For more information see
+that command."
+  :lighter " COPY+PASTE"
+  :global t
+  :group 'ourcomments-util
+  (if ourcomments-copy+paste-mode
+      (unless ourcomments-copy+paste-point
+        (message "Do not call this minor mode, use `ourcomments-copy+paste-set-point'.")
+        (setq ourcomments-copy+paste-mode nil))
+    (when ourcomments-copy+paste-point
+      (setq ourcomments-copy+paste-point nil)
+      (message "Canceled copy+paste mode"))))
+
+(defvar ourcomments-copy+paste-ovl nil)
+
+(defun ourcomments-copy+paste-cancel-highlight ()
+  (when (overlayp ourcomments-copy+paste-ovl)
+    (delete-overlay ourcomments-copy+paste-ovl))
+  (setq ourcomments-copy+paste-ovl nil))
+
+(defun ourcomments-copy+paste (restore-frames)
+  "Copy region to copy+paste point set by `ourcomments-copy+paste-set-point'.
+Also if prefix argument is given then restore frame configuration
+at the time that command was called.  Otherwise look for the
+buffer for copy+paste point in current frame.  If found select
+that window. If not then use `switch-to-buffer-other-window' to
+display it."
+  (interactive "P")
+  (cond
+   ((not ourcomments-copy+paste-point)
+    (let ((key (where-is-internal 'ourcomments-copy+paste-set-point)))
+      (setq key (if key (key-description (car key))
+                  "M-x ourcomments-copy+paste-set-point"))
+    (message "Please select destination of copy+paste first with %s" key)))
+   ((not mark-active)
+    (message "Please select a region to copy+paste first"))
+   (t
+    ;;(copy-region-as-kill (region-beginning) (region-end))
+    (clipboard-kill-ring-save (region-beginning) (region-end))
+    (let* ((marker         (nth 0 ourcomments-copy+paste-point))
+           (orig-win       (nth 1 ourcomments-copy+paste-point))
+           (orig-fcfg      (nth 2 ourcomments-copy+paste-point))
+           (buf (marker-buffer marker))
+           (win (or (when (window-live-p orig-win) orig-win)
+                    (get-buffer-window buf))))
+      (message "win=%s, buf=%s" win buf)
+      (cond (restore-frames
+             (set-frame-configuration orig-fcfg))
+            ((and win (eq (window-buffer win) buf))
+             (select-window win))
+            (t
+             (switch-to-buffer-other-window buf)))
+      (goto-char marker))
+    (let ((here (point))
+          ovl)
+      (yank)
+      (setq ovl (make-overlay here (point)))
+      (overlay-put ovl 'face 'highlight)
+      (run-with-idle-timer 2 nil 'ourcomments-copy+paste-cancel-highlight)
+      (setq ourcomments-copy+paste-ovl ovl))
+    (setq ourcomments-copy+paste-point nil)
+    (ourcomments-copy+paste-mode -1))))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Misc.
 
+;;(describe-timers)
 ;;;###autoload
-(defun find-emacs-other-file (display-file)
+(defun describe-timers ()
+  "Show timers with readable time format."
+  (interactive)
+  (with-output-to-temp-buffer (help-buffer)
+    (help-setup-xref (list #'ourcommenst-show-timers) (interactive-p))
+    (with-current-buffer (help-buffer)
+      (insert (format-time-string "Timers at %Y-%m-%d %H:%M:%S\n\n" (current-time)))
+      (if (not timer-list)
+          (insert "  None\n")
+        (insert (propertize
+                 "  When                    Rpt  What\n"
+                 'face 'font-lock-doc-face))
+        (dolist (tmr timer-list)
+          (let* ((hi-sec (timer--high-seconds tmr))
+                 (lo-sec (timer--low-seconds tmr))
+                 (mi-sec (timer--usecs tmr))
+                 (fun    (timer--function tmr))
+                 (args   (timer--args tmr))
+                 (idle-d (timer--idle-delay tmr))
+                 (rpt-d  (timer--repeat-delay tmr))
+                 (time   (concat (format-time-string "  %Y-%m-%d %H:%M:%S" (list hi-sec lo-sec 0))
+                                 (substring
+                                  (format "%.1f" (/ mi-sec 1000000.0))
+                                  1))))
+            (assert (not idle-d) t)
+            (insert (format "%s %4s  (`%-3s' %S)\n" time rpt-d fun args)))))
+      (insert "\nIdle timers:\n\n")
+      (if (not timer-idle-list)
+          (insert "  None\n")
+        (insert (propertize
+                 "  After    Rpt  What\n"
+                 'face 'font-lock-doc-face))
+        (dolist (tmr timer-idle-list)
+          (let* ((hi-sec (timer--high-seconds tmr))
+                 (lo-sec (timer--low-seconds tmr))
+                 (mi-sec (timer--usecs tmr))
+                 (fun    (timer--function tmr))
+                 (args   (timer--args tmr))
+                 (idle-d (timer--idle-delay tmr))
+                 (rpt-d  (timer--repeat-delay tmr))
+                 (time   (+ (* hi-sec 256 256) lo-sec (/ mi-sec 1000000.0)))
+                 )
+            (assert (not (not idle-d)) t)
+            (insert (format "  %.2f sec %3s  (`%s' %S)\n" time rpt-d fun args))))))))
+
+(defcustom ourcomments-insert-date-and-time "%Y-%m-%d %R"
+  "Time format for command `ourcomments-insert-date-and-time'.
+See `format-time-string'."
+  :type 'string
+  :group 'ourcomments-util)
+
+;;;###autoload
+(defun ourcomments-insert-date-and-time ()
+  "Insert date and time.
+See option `ourcomments-insert-date-and-time' for how to
+customize it."
+  (interactive)
+  (insert (format-time-string ourcomments-insert-date-and-time)))
+
+;;;###autoload
+(defun ediff-emacs-other-file ()
+  "Ediff installed and source Emacs lisp file.
+Works like `find-emacs-other-file' but also starts ediff."
+  (interactive)
+  (let ((orig-buffer (current-buffer))
+        (orig-rel-src (file-relative-name buffer-file-name source-directory))
+        (other-buffer (find-file-noselect (find-emacs-other-file buffer-file-name))))
+    (if (string= "../" (substring orig-rel-src 0 3))
+        (ediff-buffers orig-buffer other-buffer)
+      (ediff-buffers other-buffer orig-buffer))))
+
+;;;###autoload
+(defun find-emacs-other-file (elisp-file)
   "Find corresponding file to source or installed elisp file.
 If you have checked out and compiled Emacs yourself you may have
 Emacs lisp files in two places, the checked out source tree and
-the installed Emacs tree.  If buffer contains an Emacs elisp file
+the installed Emacs tree.  If ELISP-FILE is an Emacs elisp file
 in one of these places then find the corresponding elisp file in
-the other place. Return the file name of this file.
+the other place.
 
-When DISPLAY-FILE is non-nil display this file in other window
-and go to the same line number as in the current buffer."
-  (interactive (list t))
-  (unless (buffer-file-name)
-    (error "This buffer is not visiting a file"))
+When interactive set ELISP-FILE to `buffer-file-name'.  Rename
+current buffer using your `uniquify-buffer-name-style' if it is
+set.  Display the other file in the other window and go to the
+same line number as in the current buffer.  Return the other
+files buffer.
+
+If non-interactive do not open the other file, just return the
+file name of the other file."
+  (interactive (progn
+                 (unless (buffer-file-name)
+                   (error "This buffer is not visiting a file"))
+                 (list buffer-file-name)))
   (unless source-directory
     (error "Can't find the checked out Emacs sources"))
   (let* ((installed-directory (file-name-as-directory
                                (expand-file-name ".." exec-directory)))
          (relative-installed (file-relative-name
-                              (buffer-file-name) installed-directory))
+                              elisp-file installed-directory))
          (relative-source (file-relative-name
-                           (buffer-file-name) source-directory))
-         (name-nondir (file-name-nondirectory (buffer-file-name)))
+                           elisp-file source-directory))
+         (name-nondir (file-name-nondirectory elisp-file))
          source-file
          installed-file
          other-file
@@ -1203,10 +1280,13 @@ and go to the same line number as in the current buffer."
       (error "This file is not in Emacs source or installed lisp tree"))
     (unless (file-exists-p other-file)
       (error "Can't find the corresponding file %s" other-file))
-    (when display-file
+    (if (not (called-interactively-p t))
+        other-file
+      (when uniquify-buffer-name-style
+        (rename-buffer (file-name-nondirectory buffer-file-name) t))
       (find-file-other-window other-file)
-      (goto-line line-num))
-    other-file))
+      (ourcomments-goto-line line-num)
+      (current-buffer))))
 
 ;;;###autoload
 (defun ourcomments-ediff-files (def-dir file-a file-b)
@@ -1285,19 +1365,20 @@ PREDICATE.  PREDICATE takes one argument, the symbol."
 (defun describe-command (command)
   "Like `describe-function', but prompts only for interactive commands."
   (interactive
-   (let ((fn (ourcomments-command-at-point))
-	 (enable-recursive-minibuffers t)
-	 val)
-     (setq val (completing-read (if fn
-				    (format "Describe command (default %s): " fn)
-				  "Describe command: ")
+   (let* ((fn (ourcomments-command-at-point))
+          (prompt (if fn
+                      (format "Describe command (default %s): " fn)
+                    "Describe command: "))
+          (enable-recursive-minibuffers t)
+          val)
+     (setq val (completing-read prompt
 				obarray 'commandp t nil nil
 				(and fn (symbol-name fn))))
-     (list (if (equal val "")
-	       fn (intern val)))))
+     (list (if (equal val "") fn (intern val)))))
   (describe-function command))
 
 
+;;;###autoload
 (defun buffer-narrowed-p ()
   "Return non-nil if the current buffer is narrowed."
   (/= (buffer-size)
@@ -1306,23 +1387,73 @@ PREDICATE.  PREDICATE takes one argument, the symbol."
 
 ;;;###autoload
 (defun narrow-to-comment ()
+  "Narrow to current comments."
   (interactive)
+  (let ((range (ourcomments-find-comments-range (point))))
+    (if (not range)
+        (message "Can't narrow to comment because not in a comment")
+      (narrow-to-region (car range) (cdr range)))))
+
+;;;###autoload
+(defun narrow-to-defun+comments-above ()
+  "Like `narrow-to-defun' but include comments above.
+See also `widen-to-comments-above'."
+  (interactive)
+  (narrow-to-defun)
+  (widen-to-comments-above))
+
+;;;###autoload
+(defun widen-to-comments-above ()
+  "Widen to include comments above current narrowing.
+See also `narrow-to-defun+comments-above'."
+  (interactive)
+  (let ((here (point))
+        (beg (point-min))
+        (end (point-max))
+        new-beg)
+    (unless (= 1 beg)
+      (widen)
+      (when (setq new-beg (car (ourcomments-find-comments-range (1- beg))))
+        (setq beg new-beg)))
+    (narrow-to-region beg end)
+    (if new-beg
+        (progn
+          (set-window-point (selected-window) new-beg)
+          (redisplay t)
+          (goto-char here)
+          (message "Widened to comments above"))
+      (message "There is no comments immediately above"))))
+
+(defun ourcomments-find-comments-range (pos)
   (let* ((here (point-marker))
-         (size 1000)
-         (beg (progn (forward-comment (- size))
-                     ;; It looks like the wrong syntax-table is used here:
-                     ;;(message "skipped %s " (skip-chars-forward "[:space:]"))
-                     (message "skipped %s " (skip-chars-forward " \t\r\n"))
-                     (point)))
-         (end (progn (forward-comment size)
-                     ;;(message "skipped %s " (skip-chars-backward "[:space:]"))
-                     (message "skipped %s " (skip-chars-backward " \t\r\n"))
-                     (point))))
-    (goto-char here)
-    (if (not (and (>= here beg)
-                  (<= here end)))
-        (error "Not in a comment")
-      (narrow-to-region beg end))))
+         (in-comment (syntax-ppss-context (syntax-ppss pos))))
+    (unless (eq in-comment 'comment)
+      ;; It looks like the wrong syntax-table is used here: (message
+      ;;"skipped %s " (skip-chars-forward "[:space:]")) See Emacs bug
+      ;;3823, http://debbugs.gnu.org/cgi/bugreport.cgi?bug=3823
+      (skip-chars-backward " \t\r\n")
+      (unless (bobp) (backward-char))
+      (setq in-comment (syntax-ppss-context (syntax-ppss))))
+    (unless (eq in-comment 'comment)
+      (goto-char pos)
+      (skip-chars-forward " \t\r\n")
+      (unless (eobp) (forward-char 1))
+      (setq in-comment (syntax-ppss-context (syntax-ppss))))
+    (when (eq in-comment 'comment)
+      (let* ((syntax (syntax-ppss))
+             (beg (nth 8 syntax))
+             end)
+        (goto-char beg)
+        (while (forward-comment -1)
+          (setq beg (point)))
+        (goto-char beg)
+        (skip-chars-backward " \t")
+        (when (bolp) (setq beg (point)))
+        (goto-char beg)
+        (while (forward-comment 1)
+          (setq end (point)))
+        (goto-char here)
+        (cons beg end)))))
 
 (defvar describe-symbol-alist nil)
 
@@ -1407,6 +1538,8 @@ The can include 'variable, 'function and variaus 'cl-*."
        (or (and (get symbol 'custom-loads)
                 (not (get symbol 'custom-autoload)))
            (get symbol 'custom-group))))
+
+;;(message " ourcomments e %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;###autoload
 (defun describe-custom-group (symbol)
@@ -1607,7 +1740,6 @@ function."
     (ido-switch-buffer)))
 
 (defun ourcomments-ido-mode-advice()
-  (message "ourcomments-ido-mode-advice running")
   (when (memq ido-mode '(both buffer))
     (let ((the-ido-minor-map (cdr ido-minor-mode-map-entry)))
       ;;(define-key the-ido-minor-map [(control tab)] 'ido-switch-buffer))
@@ -1701,14 +1833,14 @@ function."
 (setq ourcomments-ido-adviced t)
 )
 
-(message "after advising ido")
+;;(message "after advising ido")
 ;;(ad-deactivate 'ido-visit-buffer)
 ;;(ad-activate 'ido-visit-buffer)
 
 (defvar ourcomments-ido-old-state ido-mode)
 
 (defun ourcomments-ido-ctrl-tab-activate ()
-  (message "ourcomments-ido-ctrl-tab-activate running")
+  ;;(message "ourcomments-ido-ctrl-tab-activate running")
   ;;(ad-update 'ido-visit-buffer)
   ;;(unless (ad-get-advice-info 'ido-visit-buffer)
   ;; Fix-me: The advice must be enabled before activation. Send bug report.
@@ -1726,7 +1858,7 @@ function."
   (ido-mode (or ido-mode 'buffer)))
 
 ;;;###autoload
-(defcustom ourcomments-ido-ctrl-tab nil
+(define-minor-mode ourcomments-ido-ctrl-tab
   "Enable buffer switching using C-Tab with function `ido-mode'.
 This changes buffer switching with function `ido-mode' the
 following way:
@@ -1742,24 +1874,22 @@ following way:
 
 Those keys are selected to at least be a little bit reminiscent
 of those in for example common web browsers."
-  :type 'boolean
-  :set (lambda (sym val)
-         (set-default sym val)
-         (if val
-             (ourcomments-ido-ctrl-tab-activate)
-           (ad-disable-advice 'ido-visit-buffer 'before
-                              'ourcomments-advice-ido-visit-buffer)
-           (ad-disable-advice 'ido-mode 'after
-                              'ourcomments-advice-ido-mode)
-           ;; For some reason this little complicated construct is
-           ;; needed. If they are not there the defadvice
-           ;; disappears. Huh.
-           ;;(if ourcomments-ido-old-state
-           ;;    (ido-mode ourcomments-ido-old-state)
-           ;;  (when ido-mode (ido-mode -1)))
-           ))
+  :global t
   :group 'emacsw32
-  :group 'convenience)
+  :group 'convenience
+  (if ourcomments-ido-ctrl-tab
+      (ourcomments-ido-ctrl-tab-activate)
+    (ad-disable-advice 'ido-visit-buffer 'before
+                       'ourcomments-advice-ido-visit-buffer)
+    (ad-disable-advice 'ido-mode 'after
+                       'ourcomments-advice-ido-mode)
+    ;; For some reason this little complicated construct is
+    ;; needed. If they are not there the defadvice
+    ;; disappears. Huh.
+    ;;(if ourcomments-ido-old-state
+    ;;    (ido-mode ourcomments-ido-old-state)
+    ;;  (when ido-mode (ido-mode -1)))
+    ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; New Emacs instance
@@ -1774,12 +1904,55 @@ of those in for example common web browsers."
 
 (defvar ourcomments-restart-server-mode nil)
 
+(defvar emacs-restart-in-kill-fun nil)
+;;(setq emacs-restart-in-kill-fun 'emacs-start-under-gdb)
+
+(defvar emacs-start-under-gdb-shell-file nil)
+(setq emacs-start-under-gdb-shell-file "c:/u/gdb-emacs.cmd")
+
+;;(emacs-start-under-gdb)
+(defun emacs-start-under-gdb (&rest args)
+  (interactive)
+  (unless (eq system-type 'windows-nt)
+    (unless (y-or-n-p "Sorry, this version maybe just works under w32. Enhancements welcome. Continue? ")
+      (throw 'command-level nil)))
+  (recentf-save-list)
+  (setq args (cons (ourcomments-find-emacs) args))
+  (let* ((args-text (mapconcat 'identity (cons "" args) " "))
+         (this-emacs (ourcomments-find-emacs))
+         ret
+         (gdb (locate-file "gdb" exec-path exec-suffixes))
+         (default-directory (expand-file-name "src" source-directory)))
+    ;; (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/k"
+    ;;               (concat "start gdb -ex=run --args " (ourcomments-find-emacs)
+    ;;                       " " args-text))
+    ;; (call-process "c:/u/gdb-emacs.cmd" nil 0 nil)
+    ;; (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/k" "start c:/u/gdb-emacs.cmd")
+    (if (eq system-type 'windows-nt)
+        (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/c" "start" emacs-start-under-gdb-shell-file)
+      (call-process shell-file-name emacs-start-under-gdb-shell-file))
+    ret))
+
 (defun emacs-restart-in-kill ()
   "Last step in restart Emacs and start `server-mode' if on before."
-  (let ((restart-args (when ourcomments-restart-server-mode
-                        ;; Delay 3+2 sec to be sure the old server has stopped.
-                        (list "--eval=(run-with-idle-timer 5 nil 'server-mode 1)"))))
-    (apply 'call-process (ourcomments-find-emacs) nil 0 nil restart-args)
+  (let* ((restart-args (when ourcomments-restart-server-mode
+                         ;; Delay 3+2 sec to be sure the old server has stopped.
+                         (list "--eval=(run-with-idle-timer 5 nil 'server-mode 1)")))
+         ;; Fix-me: There is an Emacs bug here, default-directory shows
+         ;; up in load-path in the new Eamcs if restart-args is like
+         ;; this, but not otherwise. And it has w32 file syntax. The
+         ;; work around below is the best I can find at the moment.
+         (first-path (catch 'first
+                       (dolist (p load-path)
+                         (when (file-directory-p p)
+                           (throw 'first p)))))
+         (default-directory (file-name-as-directory (expand-file-name first-path))))
+    ;; Fix-me: Adding -nw to restart in console does not work. Any way to fix it?
+    (unless window-system (setq restart-args (cons "-nw" restart-args)))
+    ;;(apply 'call-process (ourcomments-find-emacs) nil 0 nil restart-args)
+    (if emacs-restart-in-kill-fun
+        (apply emacs-restart-in-kill-fun restart-args)
+      (apply 'emacs restart-args))
     ;; Wait to give focus to new Emacs instance:
     (sleep-for 3)))
 
@@ -1787,76 +1960,101 @@ of those in for example common web browsers."
 (defun emacs-restart ()
   "Restart Emacs and start `server-mode' if on before."
   (interactive)
-  (let ((wait 4))
-    (while (> (setq wait (1- wait)) 0)
-      (message (propertize (format "Will restart Emacs in %d seconds..." wait)
-                           'face 'secondary-selection))
-      (sit-for 1)))
-  (setq ourcomments-restart-server-mode server-mode)
-  (add-hook 'kill-emacs-hook 'emacs-restart-in-kill t)
-  (save-buffers-kill-emacs))
+  (if (not window-system)
+      (message "Can't restart emacs if window-system is nil")
+    (let ((wait 4))
+      (while (> (setq wait (1- wait)) 0)
+        (message (propertize (format "Will restart Emacs in %d seconds..." wait)
+                             'face 'secondary-selection))
+        (sit-for 1)))
+    (setq ourcomments-restart-server-mode server-mode)
+    (add-hook 'kill-emacs-hook 'emacs-restart-in-kill t)
+    (save-buffers-kill-emacs)))
+
+(defvar ourcomments-started-emacs-use-output-buffer nil
+  "If non-nil then save output form `emacs'.
+Set this to `t' to debug problems with starting a new Emacs.
+
+If non-nil save output to buffer 'call-process emacs output'.
+Note that this will lock the Emacs calling `emacs' until the new
+Emacs has finished.")
+;;(setq ourcomments-started-emacs-use-output-buffer t)
+;;(defun my-test () (interactive) (emacs-Q "-bad-arg"))
 
 ;;;###autoload
-(defun emacs()
-  "Start a new Emacs."
+(defun emacs (&rest args)
+  "Start a new Emacs with default parameters.
+Additional ARGS are passed to the new Emacs.
+
+See also `ourcomments-started-emacs-use-output-buffer'."
   (interactive)
   (recentf-save-list)
-  (call-process (ourcomments-find-emacs) nil 0 nil)
-  (message "Started 'emacs' - it will be ready soon ..."))
+  (let* ((out-buf (when ourcomments-started-emacs-use-output-buffer
+                    (get-buffer-create "call-process emacs output")))
+         (buf-arg (or out-buf 0))
+         (args-text (mapconcat 'identity (cons "" args) " "))
+         ret
+         (fin-msg ""))
+    (when out-buf
+      (display-buffer out-buf)
+      (setq fin-msg ". Finished.")
+      (message "Started 'emacs%s' => %s. Locked until this is finished." args-text ret)
+      (redisplay))
+    (setq ret (apply 'call-process (ourcomments-find-emacs) nil buf-arg nil args))
+    (message "Started 'emacs%s' => %s%s" args-text ret fin-msg)
+    ret))
 
 ;;;###autoload
-(defun emacs-buffer-file()
+(defun emacs-buffer-file(&rest args)
   "Start a new Emacs showing current buffer file.
 Go to the current line and column in that file.
-If there is no buffer file then instead start with `dired'."
+If there is no buffer file then instead start with `dired'.
+
+This calls the function `emacs' with argument --no-desktop and
+the file or a call to dired."
   (interactive)
   (recentf-save-list)
   (let ((file (buffer-file-name))
         (lin (line-number-at-pos))
         (col (current-column)))
-    ;;(unless file (error "No buffer file name"))
     (if file
-        (progn
-          (call-process (ourcomments-find-emacs) nil 0 nil "--no-desktop"
-                        (format "+%d:%d" lin col) file)
-          (message "Started 'emacs buffer-file-name' - it will be ready soon ..."))
-      (call-process (ourcomments-find-emacs) nil 0 nil "--no-desktop" "--eval"
-                    (format "(dired \"%s\")" default-directory)))))
+        (apply 'emacs "--no-desktop" (format "+%d:%d" lin col) file args)
+      (apply 'emacs "--no-desktop" "--eval" (format "(dired \"%s\")" default-directory) args))))
 
 ;;;###autoload
-(defun emacs--debug-init()
+(defun emacs--debug-init(&rest args)
+  "Start a new Emacs with --debug-init parameter.
+This calls the function `emacs' with added arguments ARGS."
   (interactive)
-  (call-process (ourcomments-find-emacs) nil 0 nil "--debug-init")
-  (message "Started 'emacs --debug-init' - it will be ready soon ..."))
+  (apply 'emacs "--debug-init" args))
 
 ;;;###autoload
-(defun emacs--no-desktop()
+(defun emacs--no-desktop (&rest args)
+  "Start a new Emacs with --no-desktop parameter.
+This calls the function `emacs' with added arguments ARGS."
   (interactive)
-  (call-process (ourcomments-find-emacs) nil 0 nil "--no-desktop")
-  (message "Started 'emacs --no-desktop' - it will be ready soon ..."))
+  (apply 'emacs "--no-desktop" args))
 
 ;;;###autoload
-(defun emacs-Q()
-  "Start new Emacs without any customization whatsoever."
+(defun emacs-Q (&rest args)
+  "Start a new Emacs with -Q parameter.
+Start new Emacs without any customization whatsoever.
+This calls the function `emacs' with added arguments ARGS."
   (interactive)
-  (call-process (ourcomments-find-emacs) nil 0 nil "-Q")
-  (message "Started 'emacs -Q' - it will be ready soon ..."))
+  (apply 'emacs "-Q" args))
 
 ;;;###autoload
-(defun emacs-Q-nxhtml()
-  "Start new Emacs with -Q and load nXhtml."
+(defun emacs-Q-nxhtml(&rest args)
+  "Start new Emacs with -Q and load nXhtml.
+This calls the function `emacs' with added arguments ARGS."
   (interactive)
   (let ((autostart (if (boundp 'nxhtml-install-dir)
                        (expand-file-name "autostart.el" nxhtml-install-dir)
                      (expand-file-name "../../EmacsW32/nxhtml/autostart.el"
                                        exec-directory))))
-    (call-process (ourcomments-find-emacs) nil 0 nil "-Q"
-                  "--debug-init"
-                  "--load" autostart
-                  )
-    (message "Started 'emacs -Q --load \"%s\"' - it will be ready soon ..."
-             autostart)))
+    (apply 'emacs-Q "--debug-init" "--load" autostart args)))
 
+;;(message " ourcomments f %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Searching
@@ -1918,24 +2116,26 @@ with the command \\[tags-loop-continue]."
   (tags-query-replace from to delimited
 		      '(grep-get-buffer-files)))
 
+;;;###autoload
 (defun ldir-query-replace (from to files dir &optional delimited)
   "Replace FROM with TO in FILES in directory DIR.
-This runs `query-replace-regexp' in selected files.
+This runs `query-replace-regexp' in files matching FILES in
+directory DIR.
 
-See `dired-do-query-replace-regexp' for DELIMETED and more
-information."
+See `tags-query-replace' for DELIMETED and more information."
   (interactive (dir-replace-read-parameters nil nil))
   (message "%s" (list from to files dir delimited))
   ;;(let ((files (directory-files root nil file-regexp))) (message "files=%s" files))
   (tags-query-replace from to delimited
                       `(directory-files ,dir t ,files)))
 
+;;;###autoload
 (defun rdir-query-replace (from to file-regexp root &optional delimited)
   "Replace FROM with TO in FILES in directory tree ROOT.
-This runs `query-replace-regexp' in selected files.
+This runs `query-replace-regexp' in files matching FILES in
+directory tree ROOT.
 
-See `dired-do-query-replace-regexp' for DELIMETED and more
-information."
+See `tags-query-replace' for DELIMETED and more information."
   (interactive (dir-replace-read-parameters nil t))
   (message "%s" (list from to file-regexp root delimited))
   ;;(let ((files (directory-files root nil file-regexp))) (message "files=%s" files))
@@ -1952,6 +2152,8 @@ information."
                           (string= "/.." (substring subdir -3)))))
         (setq files (append files (rdir-get-files subdir file-regexp) nil))))
     files))
+
+;;(message " ourcomments f1 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 (defun dir-replace-read-parameters (has-dir recursive)
   (let* ((common
@@ -1972,6 +2174,7 @@ information."
 ;; Mostly copied from `grep-read-files'. Could possible be merged with
 ;; that.
 (defvar replace-read-files-history nil)
+;;;###autoload
 (defun replace-read-files (regexp &optional replace)
   "Read files arg for replace."
   (let* ((bn (or (buffer-file-name) (buffer-name)))
@@ -2045,17 +2248,20 @@ information."
   "Look for first program PROG in `exec-path' using `exec-suffixes'.
 Return full path if found."
   (interactive "sProgram: ")
-  ;;(let ((path (locate-file prog exec-path exec-suffixes 'executable)))
   (let ((path (executable-find prog)))
-    (when (called-interactively-p) (message "%s found in %s" prog path))
+    (when (with-no-warnings (called-interactively-p))
+      (message "%s found in %s" prog path))
     path))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Custom faces and keys
 
+;;(message " ourcomments f2 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
 ;;;###autoload
 (defun use-custom-style ()
   "Setup like in `Custom-mode', but without things specific to Custom."
+  (require 'cus-edit)
   (make-local-variable 'widget-documentation-face)
   (setq widget-documentation-face 'custom-documentation)
   (make-local-variable 'widget-button-face)
@@ -2116,9 +2322,65 @@ Return full path if found."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Org Mode
 
+;; (define-minor-mode ourcomments-org-where-mode
+;;   "Shows path in header line."
+;;   :global nil
+;;   :group 'ourcomments-util
+;;   :group 'org
+;;   (if ourcomments-org-where-mode
+;;       ;;Turn it on
+;;       (ourcomments-org-where-mode-start)
+;;     ;; Turn it off
+;;     (ourcomments-org-where-mode-stop)
+;;     ))
+;; (put 'ourcomments-org-where-mode 'permanent-local t)
+
+(defun ourcomments-org-beginning-of-defun (arg)
+  "Find previous header start.
+If ARG is positive then search that many times backward, else forward.
+
+This is the function is used for `beginning-of-defun-function'."
+  (let ((here (point))
+        on-heading)
+    (outline-back-to-heading)
+    (setq on-heading (= here (point)))
+    (if (< 0 arg)
+        (progn
+          (unless on-heading (setq arg (1- arg)))
+          ;; See `outline-backward-same-level'.
+          (while (> arg 0)
+            (let ((here2 (point))
+                  (point-to-move-to (outline-get-last-sibling)))
+              (if point-to-move-to
+                  (progn
+                    (goto-char point-to-move-to)
+                    (setq arg (1- arg)))
+                (setq arg 0)
+                (goto-char here2)))))
+      ;;(forward-char)
+      (outline-forward-same-level (- arg)))))
+
+;;(message " ourcomments f3 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+(defun ourcomments-org-end-of-defun ()
+  "Find next header start.
+This function is used for `end-of-defun-function'."
+  (org-end-of-subtree t t)
+  (backward-char)
+  )
+
+(defun ourcomments-org-set-beginning-and-end-defuns ()
+  "Setup beginning and end of defun functions for `org-mode'."
+  (unless (local-variable-p 'beginning-of-defun-function)
+    (set (make-local-variable 'beginning-of-defun-function) 'ourcomments-org-beginning-of-defun)
+    (set (make-local-variable 'end-of-defun-function) 'ourcomments-org-end-of-defun)))
+
+(add-hook 'org-mode-hook 'ourcomments-org-set-beginning-and-end-defuns)
+
 (defun ourcomments-org-complete-and-replace-file-link ()
   "If on a org file link complete file name and replace it."
   (interactive)
+  (require 'org)
   (let* ((here (point-marker))
          (on-link (eq 'org-link (get-text-property (point) 'face)))
          (link-beg (when on-link
@@ -2160,6 +2422,176 @@ Return full path if found."
           (delete-overlay ovl)
           (goto-char here))))))
 
+;; (defun ourcomments-org-paste-html-link (html-link)
+;;   "If there is an html link on clipboard paste it as an org link.
+;; If you have this on the clipboard
+;;    <a href=\"http://my.site.org/\">My Site</a>
+;; It will paste this
+;;    [[http://my.site.org/][My Site]]
+;; If the URL is to a local file it will create an org link to the
+;; file.
+;; Tip: You can use the Firefox plugin Copy as HTML Link, see URL
+;;      `https://addons.mozilla.org/en-US/firefox/addon/2617'.
+;; "
+;;   (interactive (list (current-kill 0)))
+;;   (let ((conv-link (ourcomments-org-convert-html-link html-link)))
+;;       (if (not conv-link)
+;;           (message (propertize "No html link on clipboard" 'face 'font-lock-warning-face))
+;;         (insert conv-link))))
+
+;; (defun ourcomments-org-convert-html-link (html-link)
+;;   (let (converted url str)
+;;     (save-match-data
+;;       (while (string-match ourcomments-org-paste-html-link-regexp html-link)
+;;         (setq converted t)
+;;         (setq url (match-string 1 html-link))
+;;         (setq str (match-string 2 html-link))
+;;         ;;(setq str (concat str (format "%s" (setq temp-n (1+ temp-n)))))
+;;         (setq html-link (replace-match (concat "[[" url "][" str "]]") nil nil html-link 0))))
+;;     (when converted
+;;       html-link)))
+
+(defconst ourcomments-org-paste-html-link-regexp
+  "\\`\\(?:<a [^>]*?href=\"\\(.*?\\)\"[^>]*?>\\([^<]*\\)</a>\\)\\'")
+
+;;(string-match-p ourcomments-org-paste-html-link-regexp "<a href=\"link\">text</a>")
+
+;;(defvar temp-n 0)
+
+;;(message " ourcomments f4 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+(defun ourcomments-org-convert-html-links-in-buffer (beg end)
+  "Convert html link between BEG and END to org mode links.
+If there is an html link in the buffer
+
+   <a href=\"http://my.site.org/\">My Site</a>
+
+that starts at BEG and ends at END then convert it to this
+
+   [[http://my.site.org/][My Site]]
+
+If the URL is to a local file and the buffer is visiting a file
+make the link relative.
+
+However, if the html link is inside an #+BEGIN - #+END block or a
+variant of such blocks then leave the link as it is."
+  (when (derived-mode-p 'org-mode)
+    (save-match-data
+      (let ((here (copy-marker (point)))
+            url str converted
+            lit-beg lit-end)
+        (goto-char beg)
+        (save-restriction
+          (widen)
+          (setq lit-beg (search-backward "#+BEGIN" nil t))
+          (when lit-beg
+            (goto-char lit-beg)
+            (setq lit-end (or (search-forward "#+END" nil t)
+                              (point-max)))))
+        (when (or (not lit-beg)
+                  (> beg lit-end))
+          (goto-char beg)
+          (when (save-restriction
+                  (narrow-to-region beg end)
+                  (looking-at ourcomments-org-paste-html-link-regexp))
+            (setq converted t)
+            (setq url (match-string-no-properties 1))
+            (setq str (match-string-no-properties 2))
+            ;; Check if the URL is to a local file and absolute. And we
+            ;; have a buffer.
+            (when (and (buffer-file-name)
+                       (> (length url) 5)
+                       (string= (substring url 0 6) "file:/"))
+              (let ((abs-file-url
+                     (if (not (memq system-type '(windows-nt ms-dos)))
+                         (substring url 8)
+                       (if (string= (substring url 0 8) "file:///")
+                           (substring url 8)
+                         ;; file://c:/some/where.txt
+                         (substring url 7)))))
+                (setq url (concat "file:"
+                                  (file-relative-name abs-file-url
+                                                      (file-name-directory
+                                                       (buffer-file-name)))))))
+            (replace-match (concat "[[" url "][" str "]]") nil nil nil 0)))
+        (goto-char here)
+        nil))))
+
+;;(message " ourcomments g2 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+(defvar ourcomments-paste-with-convert-hook nil
+  "Normal hook run after certain paste commands.
+These paste commands are in the list
+`ourcomments-paste-with-convert-commands'.
+
+Each function in this hook is called with two parameters, the
+start and end of the pasted text, until a function returns
+non-nil.")
+(add-hook 'ourcomments-paste-with-convert-hook 'ourcomments-org-convert-html-links-in-buffer)
+
+(defvar ourcomments-paste-beg) ;; dyn var
+(defvar ourcomments-paste-end) ;; dyn var
+(defun ourcomments-grab-paste-bounds (beg end len)
+  (setq ourcomments-paste-beg (min beg ourcomments-paste-beg))
+  (setq ourcomments-paste-end (max end ourcomments-paste-end)))
+
+(defmacro ourcomments-advice-paste-command (paste-command)
+  (let ((adv-name (make-symbol (concat "ourcomments-org-ad-"
+                                       (symbol-name paste-command)))))
+    `(defadvice ,paste-command (around
+                                ,adv-name)
+       (let ((ourcomments-paste-beg (point-max)) ;; dyn var
+             (ourcomments-paste-end (point-min))) ;; dyn var
+         (add-hook 'after-change-functions `ourcomments-grab-paste-bounds nil t)
+         ad-do-it ;;;;;;;;;;;;;;;;;;;;;;;;;;
+         (remove-hook 'after-change-functions `ourcomments-grab-paste-bounds t)
+         (run-hook-with-args-until-success 'ourcomments-paste-with-convert-hook
+                                           ourcomments-paste-beg
+                                           ourcomments-paste-end)))))
+
+(defcustom ourcomments-paste-with-convert-commands '(yank cua-paste viper-put-back viper-Put-back)
+  "Commands for which past converting is done.
+See `ourcomments-paste-with-convert-mode' for more information."
+  :type '(repeat function)
+  :group 'ourcomments-util)
+
+;;;###autoload
+(define-minor-mode ourcomments-paste-with-convert-mode
+  "Pasted text may be automatically converted in this mode.
+The functions in `ourcomments-paste-with-convert-hook' are run
+after commands in `ourcomments-paste-with-convert-commands' if any
+of the functions returns non-nil that text is inserted instead of
+the original text.
+
+For exampel when this mode is on and you paste an html link in an
+`org-mode' buffer it will be directly converted to an org style
+link. \(This is the default behaviour.)
+
+Tip: The Firefox plugin Copy as HTML Link is handy, see URL
+     `https://addons.mozilla.org/en-US/firefox/addon/2617'.
+
+Note: This minor mode will defadvice the paste commands."
+  :global t
+  :group 'cua
+  :group 'viper
+  :group 'ourcomments-util
+  (if ourcomments-paste-with-convert-mode
+      (progn
+        (dolist (command ourcomments-paste-with-convert-commands)
+          (eval `(ourcomments-advice-paste-command ,command))
+          (ad-activate command)))
+    (dolist (command ourcomments-paste-with-convert-commands)
+      (ad-unadvise command))))
+
+;; (ourcomments-advice-paste-command cua-paste)
+;; (ad-activate 'cua-paste)
+;; (ad-deactivate 'cua-paste)
+;; (ad-update 'cua-paste)
+;; (ad-unadvise 'cua-paste)
+
+
+;;(message " ourcomments g3 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Menu commands to M-x history
 
@@ -2170,8 +2602,10 @@ Return full path if found."
 ;; (setq extended-command-history nil)
 (defun ourcomments-M-x-menu-pre ()
   "Add menu command to M-x history."
+  ;;(message "M-x-menu-pre: %s" (this-command-keys-vector))
   (let ((is-menu-command (equal '(menu-bar)
-                                (elt (this-command-keys-vector) 0)))
+                                (when (< 0 (length (this-command-keys-vector)))
+                                  (elt (this-command-keys-vector) 0))))
         (pre-len (length extended-command-history)))
     (when (and is-menu-command
                (not (memq this-command '(ourcomments-M-x-menu-mode))))
@@ -2180,9 +2614,12 @@ Return full path if found."
         ;; This message is given pre-command and is therefore likely
         ;; to be overwritten, but that is ok in this case. If the user
         ;; has seen one of these messages s?he knows.
-        (message (propertize "(Added %s to M-x history so you can run it from there)"
-                             'face 'file-name-shadow)
-                 this-command)))))
+
+        (let ((msg
+               (format "(Added %s to M-x history so you can run it from there)"
+                       this-command)))
+          (with-temp-message (propertize msg 'face 'file-name-shadow)
+            (sit-for 3)))))))
 
 ;;;###autoload
 (define-minor-mode ourcomments-M-x-menu-mode
@@ -2196,6 +2633,8 @@ Only commands that are not already in M-x history are added."
   (if ourcomments-M-x-menu-mode
       (add-hook 'pre-command-hook 'ourcomments-M-x-menu-pre)
     (remove-hook 'pre-command-hook 'ourcomments-M-x-menu-pre)))
+
+;;(message " ourcomments g4 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Warnings etc
@@ -2219,6 +2658,43 @@ Only commands that are not already in M-x history are added."
   (setq ourcomments-warnings (cons (apply 'format format-string args)
                                    ourcomments-warnings))
   (add-hook 'post-command-hook 'ourcomments-warning-post))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Windmove
+
+;;(message " ourcomments g5 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+
+(defcustom ourcomments-windmove-mode-modifier 'meta
+  "Modifier for windmove key bindings.
+Used as in `windmove-default-keybindings' but for
+`ourcomments-windmove-mode'."
+  :type '(choice (const meta)
+                 (const control))
+  :group 'windmove)
+
+(defvar ourcomments-windmove-mode-map
+  (let ((map (make-sparse-keymap))
+        (modifier 'meta))
+    (define-key map (vector (list modifier 'left))  'windmove-left)
+    (define-key map (vector (list modifier 'right)) 'windmove-right)
+    (define-key map (vector (list modifier 'up))    'windmove-up)
+    (define-key map (vector (list modifier 'down))  'windmove-down)
+    map))
+
+(define-minor-mode ourcomments-windmove-mode
+  "Make windmove bindings a minor mode.
+`windmove-default-keybindings' defines key bindings in
+`global-map'.  Those can then be overrided by major mode
+bindings, which mayb be quite inconvenient since the user
+probably frequently uses the windmove keybindings.
+
+This minor mode therefore instead defines them in a minor mode."
+  :global t
+  :group 'windmove)
+
+
+;;(message " ourcomments fin %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 (provide 'ourcomments-util)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

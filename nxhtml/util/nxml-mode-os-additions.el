@@ -52,11 +52,12 @@
 ;;   * Initial public release
 
 ;; Added require rng-valid (Lennart Borgman)
+;; Added autoloads (Lennart Borgman)
 
 ;;; Code:
 
 (require 'nxml-mode)
-(require 'rng-valid)
+(eval-and-compile (require 'rng-valid))
 
 (defun rng-mode-os-additions-set-key-bindings ()
   (define-key nxml-mode-map "\C-c\C-s\C-r" 'rng-reload-schema-file)
@@ -83,16 +84,19 @@
       (error "This file is not associated with a schema file."))
     (funcall fn schema-filename)))
 
+;;;###autoload
 (defun rng-find-schema-file ()
   "Edit the current schema file."
   (interactive)
   (rng-apply-find-schema-file 'find-file))
 
+;;;###autoload
 (defun rng-find-schema-file-other-frame ()
   "Edit the current schema in another frame."
   (interactive)
   (rng-apply-find-schema-file 'find-file-other-frame))
 
+;;;###autoload
 (defun rng-find-schema-file-other-window ()
   "Edit the current schema in another window."
   (interactive)

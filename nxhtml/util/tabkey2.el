@@ -263,10 +263,12 @@
 
 (eval-when-compile (require 'cl))
 (eval-when-compile (require 'appmenu nil t))
+(eval-when-compile (require 'mumamo nil t))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Custom
 
+;;;###autoload
 (defgroup tabkey2 nil
   "Customization of second tab key press."
   :group 'nxhtml
@@ -345,17 +347,22 @@ If value is a number then delay message that number of seconds."
              (appmenu-remove 'tabkey2))))
   :group 'tabkey2)
 
+;; (defun yas/expandable-at-point ()
+;;   "Return non-nil if a snippet can be expanded here."
+;;   (when (and (fboundp 'yas/template-condition-predicate)
+;;              (boundp 'yas/buffer-local-condition))
+;;     (yas/template-condition-predicate
+;;      yas/buffer-local-condition)))
+
 (defun yas/expandable-at-point ()
-  "Return non-nil if a snippet can be expanded here."
-  (when (fboundp 'yas/template-condition-predicate)
-    (yas/template-condition-predicate
-     yas/buffer-local-condition)))
+ "Return non-nil if a snippet can be expanded here."
+ (car (yas/current-key)))
 
 (defvar tabkey2-company-backends
   "List of frontends and their backends."
   '((company-mode (NONE                   company-abbrev . "Abbrev")
                   (NONE                   company-css . "CSS")
-                  (dabbrev-expan          company-dabbrev . "dabbrev for plain text")
+                  (dabbrev-expand         company-dabbrev . "dabbrev for plain text")
                   (NONE                   company-dabbrev-code . "dabbrev for code")
                   (NONE                   company-eclim . "eclim (an Eclipse interace)")
                   (lisp-symbol-complete   company-elisp . "Emacs Lisp")
@@ -379,27 +386,30 @@ If value is a number then delay message that number of seconds."
 
 (defcustom tabkey2-completion-functions
   '(
+    ("Emacs default completion" completion-at-point completion-at-point-functions)
     ;; Front ends (should take care of the rest, ie temporary things,
     ;; snippets etc...)
     ("Company Mode completion" company-complete company-mode)
     ;; Temporary things
-    ("Spell check word" flyspell-correct-word-before-point)
+    ("Spell check word" flyspell-correct-word-before-point nil)
     ;; Snippets
     ("Yasnippet" yas/expand (yas/expandable-at-point))
     ;; Main mode related, often used
     ("Semantic Smart Completion" senator-complete-symbol senator-minor-mode)
-    ("Programmable completion" pcomplete)
-    ("nXML completion" nxml-complete)
-    ("Complete Emacs symbol" lisp-complete-symbol)
-    ("Widget complete" widget-complete)
-    ("Comint Dynamic Complete" comint-dynamic-complete)
-    ("PHP completion" php-complete-function)
-    ("Tags completion" complete-tag)
+    ("Programmable completion" pcomplete (and (boundp 'pcomplete-parse-arguments-function)
+                                              pcomplete-parse-arguments-function))
+    ("nXML completion" nxml-complete (derived-mode-p 'nxml-mode))
+    ("Complete Emacs symbol" lisp-complete-symbol (and (derived-mode-p 'emacs-lisp-mode)
+                                                       (not (fboundp 'completion-at-point))))
+    ("Widget complete" widget-complete nil)
+    ("Comint Dynamic Complete" comint-dynamic-complete nil)
+    ("PHP completion" php-complete-function php-mode)
+    ("Tags completion" complete-tag nil)
     ;; General word completion
     ("Predictive word" complete-word-at-point predictive-mode)
     ("Predictive abbreviations" pabbrev-expand-maybe)
-    ("Dynamic word expansion" dabbrev-expand nil (setq dabbrev--last-abbrev-location nil))
-    ("Ispell complete word" ispell-complete-word)
+    ("Dynamic word expansion" dabbrev-expand t (setq dabbrev--last-abbrev-location nil))
+    ("Ispell complete word" ispell-complete-word t)
     ;; The catch all
     ("Anything" anything (commandp 'anything))
     )
@@ -417,7 +427,8 @@ COMPLETION-FUNCTION is the completion function symbol.
 The entry is considered active if the symbol COMPLETION-FUNCTION
 is bound to a command and
 
-  - This function has a key binding at point.
+  - This function has a key binding at point and ACTIVE-FORM is
+  equal to nil.
 
 or
 
@@ -506,6 +517,58 @@ This key is always bound to `tabkey2-cycle-completion-functions'."
   :group 'tabkey2)
 
 (tabkey2-bind-keys tabkey2-first-key tabkey2-alternate-key)
+
+;;;###autoload
+(define-minor-mode tabkey2-mode
+  "More fun with Tab key number two (completion etc).
+This global minor mode by default binds Tab in a way that let you
+do completion with Tab in all buffers \(where it is possible).
+
+The Tab key is easy to type on your keyboard.  Then why not use
+it for completion, something that is very useful?  Shells usually
+use Tab for completion so many are used to it.  This was the idea
+of Smart Tabs and this is a generalization of that idea.
+
+However in Emacs the Tab key is usually used for indentation.
+The idea here is that if Tab has been pressed once for
+indentation, then as long as point stays further Tab keys might
+as well do completion.
+
+So you kind of do Tab-Tab for first completion \(and then just
+Tab for further completions as long as point is not moved).
+
+And there is even kind of Tab-Tab-Tab completion: If completion
+fails the next completion function will be the one you try with
+next Tab. \(You get some notification of this, of course.)
+
+See `tabkey2-first' for more information about usage.
+
+Note: If you do not want the Tab-Tab behaviour above, but still
+want an easy way to reach the available completion functions,
+then you can instead of turning on tabkey2-mode enter this in
+your .emacs:
+
+ \(global-set-key [f8] 'tabkey2-cycle-completion-functions)
+
+After hitting f8 you will then be in the same state as after the
+first in tabkey2-mode."
+  :keymap nil
+  :global t
+  :group 'tabkey2
+  (if tabkey2-mode
+      (progn
+        (add-hook 'minibuffer-setup-hook 'tabkey2-minibuffer-setup)
+        (add-hook 'post-command-hook 'tabkey2-post-command)
+        ;; Update emul here if keymap have changed
+        (setq tabkey2--emul-keymap-alist
+              (list (cons 'tabkey2-mode
+                          tabkey2-mode-emul-map)))
+        (add-to-list 'emulation-mode-map-alists 'tabkey2--emul-keymap-alist))
+    (tabkey2-completion-state-mode -1)
+    (remove-hook 'post-command-hook 'tabkey2-post-command)
+    (remove-hook 'minibuffer-setup-hook 'tabkey2-minibuffer-setup)
+    (setq emulation-mode-map-alists (delq 'tabkey2--emul-keymap-alist
+                                          emulation-mode-map-alists))))
 
 (defcustom tabkey2-modes-that-use-more-tabs
   '(python-mode
@@ -655,23 +718,29 @@ Otherwise return nil."
 Return t if CHK is a symbol with non-nil value or a form that
 evals to non-nil.
 
-Otherwise return t if FUN has a key binding at point."
+Otherwise return t if CHK is equal to nil and FUN has a key
+binding at point."
   (when (and (fboundp fun)
              (commandp fun))
     (or (if (symbolp chk)
             (when (boundp chk) (symbol-value chk))
           (eval chk))
-        (let* ((emulation-mode-map-alists
-                ;; Remove keymaps from tabkey2 in this copy:
-                (delq 'tabkey2--emul-keymap-alist
-                      (copy-sequence emulation-mode-map-alists)))
-               (keys (tabkey2-symbol-keys fun))
-               kb-bound)
-          (dolist (key keys)
-            (unless (memq (car (append key nil))
-                          '(menu-bar))
-              (setq kb-bound t)))
-          kb-bound))))
+        (and (eq nil chk)
+             (let* ((emulation-mode-map-alists
+                     ;; Remove keymaps from tabkey2 in this copy:
+                     (delq 'tabkey2--emul-keymap-alist
+                           (copy-sequence emulation-mode-map-alists)))
+                    (keys (tabkey2-symbol-keys fun))
+                    kb-bound)
+               (dolist (key keys)
+                 (unless (memq (car (append key nil))
+                               '(menu-bar))
+                   (setq kb-bound t)))
+               kb-bound))
+        (let ((map (get-char-property (point) 'keymap)))
+          (when map
+            (where-is-internal fun (list map))))
+        )))
 
 (defun tabkey2-is-active-p (fun)
   "Return FUN is active.
@@ -779,9 +848,11 @@ See `tabkey2-first' for more information."
   (let ((C-g-binding (or (key-binding [(control ?g)])
                          (key-binding "\C-g")))
         did-more)
-    (when company-mode
+    (when (and (boundp 'company-mode)
+               company-mode)
       ;;(message "tabkey2:company-abort")
-      (company-abort)
+      (when (fboundp 'company-abort)
+        (company-abort))
       (setq did-more t))
     (when (and C-g-binding
              (not (eq C-g-binding this-command)))
@@ -819,12 +890,13 @@ Cancel delayed message."
   "Turn off Tab completion state if not feasable any more.
 This is run in `post-command-hook' after each command."
   (condition-case err
-      (save-match-data
+      ;;(save-match-data
         ;; Delayed messages
         (if (not (tabkey2-completion-state-p))
             (tabkey2-completion-state-mode -1)
           ;;(message "tabkey2-current-tab-function=%s" tabkey2-current-tab-function)
-          (tabkey2-move-overlays)))
+          (tabkey2-move-overlays))
+    ;;)
     (error (message "tabkey2 post: %s" (error-message-string err)))))
 
 (defun tabkey2-minibuffer-setup ()
@@ -1199,7 +1271,7 @@ through the completion functions too choose which one to use.)
 NOTE: This uses `emulation-mode-map-alists' and it supposes that
 nothing else is bound to Tab there."
   (interactive "P")
-          (message "first:tabkey2-step-out=%s, %s" (this-command-keys) tabkey2-step-out-of-the-way)
+  ;;(message "first:tabkey2-step-out=%s, %s" (this-command-keys) tabkey2-step-out-of-the-way)
   (if tabkey2-step-out-of-the-way
       (progn
         (message "step-out=%s" tabkey2-step-out-of-the-way)
@@ -1255,7 +1327,7 @@ nothing else is bound to Tab there."
                      last-input-event to-do-1
                      (if to-do-2 to-do-2 "(same)")))
         (when to-do-1
-          (let (mumamo-multi-major-mode)
+          (let (xmumamo-multi-major-mode)
               (tabkey2-call-interactively to-do-1)))
         (unless (tabkey2-read-only-p)
           (when to-do-2
@@ -1295,58 +1367,6 @@ If used with a PREFIX argument then just show what Tab will do."
           (if tabkey2-current-tab-function
               (tabkey2-show-current-message)
             (message "No more active completion functions in this buffer")))))))
-
-;;;###autoload
-(define-minor-mode tabkey2-mode
-  "More fun with Tab key number two (completion etc).
-This global minor mode by default binds Tab in a way that let you
-do completion with Tab in all buffers \(where it is possible).
-
-The Tab key is easy to type on your keyboard.  Then why not use
-it for completion, something that is very useful?  Shells usually
-use Tab for completion so many are used to it.  This was the idea
-of Smart Tabs and this is a generalization of that idea.
-
-However in Emacs the Tab key is usually used for indentation.
-The idea here is that if Tab has been pressed once for
-indentation, then as long as point stays further Tab keys might
-as well do completion.
-
-So you kind of do Tab-Tab for first completion \(and then just
-Tab for further completions as long as point is not moved).
-
-And there is even kind of Tab-Tab-Tab completion: If completion
-fails the next completion function will be the one you try with
-next Tab. \(You get some notification of this, of course.)
-
-See `tabkey2-first' for more information about usage.
-
-Note: If you do not want the Tab-Tab behaviour above, but still
-want an easy way to reach the available completion functions,
-then you can instead of turning on tabkey2-mode enter this in
-your .emacs:
-
- \(global-set-key [f8] 'tabkey2-cycle-completion-functions)
-
-After hitting f8 you will then be in the same state as after the
-first in tabkey2-mode."
-  :keymap nil
-  :global t
-  :group 'tabkey2
-  (if tabkey2-mode
-      (progn
-        (add-hook 'minibuffer-setup-hook 'tabkey2-minibuffer-setup)
-        (add-hook 'post-command-hook 'tabkey2-post-command)
-        ;; Update emul here if keymap have changed
-        (setq tabkey2--emul-keymap-alist
-              (list (cons 'tabkey2-mode
-                          tabkey2-mode-emul-map)))
-        (add-to-list 'emulation-mode-map-alists 'tabkey2--emul-keymap-alist))
-    (tabkey2-completion-state-mode -1)
-    (remove-hook 'post-command-hook 'tabkey2-post-command)
-    (remove-hook 'minibuffer-setup-hook 'tabkey2-minibuffer-setup)
-    (setq emulation-mode-map-alists (delq 'tabkey2--emul-keymap-alist
-                                          emulation-mode-map-alists))))
 
 ;; Fix-me: I am not sure that it really is useful with a globalized
 ;; minor mode here because there are so many other ways to control
@@ -1582,7 +1602,7 @@ BUF: buffer"
                                       (customize-option
                                        'tabkey2-completion-functions)))
         (insert ".\nSee function `tabkey2-mode' for more information.")
-        (print-help-return-message)))))
+        (with-no-warnings (print-help-return-message))))))
 
 (defvar tabkey2-completing-read 'completing-read)
 
@@ -1602,12 +1622,12 @@ BUF: buffer"
            (tit "Complete")
            (map (make-sparse-keymap tit)))
       (define-key map [tabkey2-usage]
-        (list 'menu-item "Show available completion functions"
+        (list 'menu-item "Show Available Completion Functions for TabKey2"
               'tabkey2-show-completion-functions))
       (define-key map [tabkey2-divider-1] (list 'menu-item "--"))
-      (let ((set-map (make-sparse-keymap "Set completion")))
+      (let ((set-map (make-sparse-keymap "Set Completion")))
         (define-key map [tabkey2-choose]
-          (list 'menu-item "Set Primary Tab completion for buffer" set-map))
+          (list 'menu-item "Set Primary TabKey2 Tab Completion in Buffer" set-map))
         (dolist (cf-rec cf-r)
           (let ((dsc (nth 0 cf-rec))
                 (fun (nth 1 cf-rec)))
@@ -1630,7 +1650,7 @@ BUF: buffer"
                 '(:radio . (null tabkey2-chosen-completion-function))))
         (define-key set-map [tabkey2-set-header-div] (list 'menu-item "--"))
         (define-key set-map [tabkey2-set-header]
-          (list 'menu-item "Set Primary Tab completion for buffer"))
+          (list 'menu-item "Set Primary Tab Completion for Buffer"))
         )
       (define-key map [tabkey2-divider] (list 'menu-item "--"))
       (dolist (cf-rec cf-r)

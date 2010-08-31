@@ -1,8 +1,6 @@
 ;;; key-cat.el --- List key bindings by category
-
-;; Copyright (C) 2005 by Lennart Borgman
-
-;; Author: Lennart Borgman <lennartDOTborgmanDOT073ATstudentDOTluDOTse>
+;;
+;; Author: Lennart Borgman (lennart O borgman A gmail O com)
 ;; Created: Sat Jan 28 2006
 ;; Version: 0.25
 ;; Last-Updated: 2009-05-09 Sat
@@ -59,6 +57,8 @@
 ;;; Code:
 
 (eval-when-compile (require 'cl))
+(eval-when-compile (require 'tabkey2 nil t))
+(declare-function nxhtml-validation-header-mode "nxhtml-mode")
 
 (defconst key-cat-cmd-list
   '(
@@ -78,7 +78,8 @@
     ("Special Functions and Keys"
      ;; For similar functions that are most often bound to a specific key
      (commands
-      key-cat-tab
+      ;;key-cat-tab
+      indent-for-tab-command
       key-cat-complete
       )
      )
@@ -161,6 +162,7 @@ If the argument evaluates to non-nil the list is shown."
 
 (defvar key-cat-cmd-list-1 nil)
 
+;;;###autoload
 (defun key-cat-help()
   "Display reference sheet style help for common commands.
 See also `key-cat-cmd-list'."
@@ -176,8 +178,7 @@ See also `key-cat-cmd-list'."
   (condition-case err
       (save-match-data ;; runs in timer
         (let ((result))
-          (help-setup-xref (list #'key-cat-help)
-                           (interactive-p))
+          (help-setup-xref (list #'key-cat-help) (interactive-p))
           ;;         (push (list "Changing commands"
           ;;                     (list
           ;;                      'command
@@ -245,11 +246,18 @@ See also `key-cat-cmd-list'."
                         (put-text-property 0 (length s) 'face '(:foreground "blue") s)
                         (push s result))
                       (push ":\n" result)
-                      (push (concat
-                             "    "
-                             "Performe completion at point (done by specific major mode function).\n")
-                            result)
-                      (push (format "    %17s  %s\n" cmdstr (key-description [meta tab])) result)
+                      (if tabkey2-mode
+                          (progn
+                            (push (concat
+                                   "    "
+                                   "Perform completion at point (`tabkey2-mode' chooses function).\n")
+                                  result)
+                            (push (format "    %17s  %s\n" cmdstr (key-description [tab])) result))
+                        (push (concat
+                               "    "
+                               "Perform completion at point (specific major mode function if any).\n")
+                              result)
+                        (push (format "    %17s  %s\n" cmdstr (key-description [meta tab])) result))
                       )
                      (t
                       (let ((s (format "`%s':  (not a function)\n" cmd)))
@@ -289,7 +297,9 @@ See also `key-cat-cmd-list'."
                                       'face '(:weight bold
                                                       :height 1.5
                                                       :foreground "RGB:00/00/66") s)
-                   s))
+                   s)
+                 "Note: They key bindings shown are those in your current Emacs\n"
+                 )
                 (setq result (reverse result))
                 (dolist (r result)
                   (insert r))
