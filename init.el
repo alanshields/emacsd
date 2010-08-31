@@ -131,12 +131,14 @@
  '(cperl-auto-newline nil)
  '(current-language-environment "Latin-1")
  '(default-input-method "latin-1-prefix")
+ '(exec-path (quote ("/usr/texbin" "/usr/bin" "/bin" "/opt/local/bin" "/usr/sbin" "/sbin" "/Applications/Emacs.app/Contents/MacOS/bin")))
  '(global-font-lock-mode t nil (font-lock))
  '(indent-tabs-mode nil)
  '(inhibit-startup-screen t)
  '(js2-basic-offset 4)
  '(ns-alternate-modifier (quote super))
  '(ns-command-modifier (quote meta))
+ '(org-agenda-files nil)
  '(rails-use-indent-and-complete nil)
  '(safe-local-variable-values (quote ((lua-indent-level . 4))))
  '(sentence-end-double-space nil)
@@ -182,6 +184,7 @@
 
 ;; Org-Mode
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
+(setq org-export-with-LaTeX-fragments t)
 (add-hook 'org-mode-hook
           (lambda ()
             (when (not (featurep 'my-org-mode))
@@ -305,6 +308,10 @@
                   (setq first-line-p 0)
                   (forward-line))))))))))
 
+(defun align-php-assign (beg end)
+  "Align a typical PHP assignment block (aligns along = and =>)"
+  (interactive "r")
+  (align-regexp beg end "\\(\\s-*\\)\\(=>\\|=\\)" 1 1 nil))
 
 ;; Steelhead specific configurations
 (when (file-exists-p "~/steelhead")
