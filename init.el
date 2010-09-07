@@ -21,9 +21,9 @@
   (when (file-exists-p slime-dir)
     (setq load-path (cons slime-dir load-path))
     (require 'slime-autoloads)
-    (setq slime-lisp-implementations
-	  `((sbcl ("/opt/local/bin/sbcl"))
-	    (clisp ("/opt/local/bin/clisp"))))
+    (eval '(setq slime-lisp-implementations
+                 `((sbcl ("/opt/local/bin/sbcl"))
+                   (clisp ("/opt/local/bin/clisp")))))
     (add-hook 'lisp-mode-hook
 	      (lambda ()
 		(cond ((not (featurep 'slime))
@@ -39,16 +39,16 @@
 (setq sgml-indent-data t)
 
 ;; Bigloo's scheme mode
-(autoload 'bdb "bdb" "bdb mode" t)
-(autoload 'bee-mode "bee-mode" "bee mode" t)
+;; (autoload 'bdb "bdb" "bdb mode" t)
+;; (autoload 'bee-mode "bee-mode" "bee mode" t)
 
-(setq auto-mode-alist
-      (append '(("\\.scm$" . bee-mode)
-                ("\\.sch$" . bee-mode)
-                ("\\.scme$" . bee-mode)
-                ("\\.bgl$" . bee-mode)
-                ("\\.bee$" . bee-mode))
-              auto-mode-alist))
+;; (setq auto-mode-alist
+;;       (append '(("\\.scm$" . bee-mode)
+;;                 ("\\.sch$" . bee-mode)
+;;                 ("\\.scme$" . bee-mode)
+;;                 ("\\.bgl$" . bee-mode)
+;;                 ("\\.bee$" . bee-mode))
+;;               auto-mode-alist))
 
 
 ;; Use Windows's meta-return for tag completion
@@ -77,14 +77,15 @@
 (add-to-list 'auto-mode-alist '("templates/.*\\.html$" . html-mode))
 
 ;; eshell stuff
-(defun eshell-maybe-bol ()
-  (interactive)
-  (let ((p (point)))
-    (eshell-bol)
-    (if (= p (point))
-        (beginning-of-line))))
 (add-hook 'eshell-mode-hook
-          '(lambda () (define-key eshell-mode-map "\C-a" 'eshell-maybe-bol)))
+          '(progn
+             (defun eshell-maybe-bol ()
+               (interactive)
+               (let ((p (point)))
+                 (eshell-bol)
+                 (if (= p (point))
+                     (beginning-of-line))))
+             '(lambda () (define-key eshell-mode-map "\C-a" 'eshell-maybe-bol))))
 
 ;; Tuareg caMeL mode
 ;; (add-to-list 'load-path "~/.emacs.d/tuareg/")
@@ -99,6 +100,7 @@
   ;; If you edit it by hand, you could mess it up, so be careful.
   ;; Your init file should contain only one such instance.
   ;; If there is more than one, they won't work right.
+ '(default ((t (:inherit nil :stipple nil :background "White" :foreground "Black" :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 120 :width normal :foundry "apple" :family "Inconsolata"))))
  '(mmm-output-submode-face ((t (:background "FloralWhite" :foreground "forestgreen")))))
 
 ;; color theme time
@@ -234,6 +236,7 @@
         (setq len (+ len 1))))
     len))
 
+(require 'cl)
 (defun align-table (start end)
   "Aligns text in the region in a table format split by ,"
   (interactive "r")
@@ -259,7 +262,7 @@
                                  (setq lengths (cons
                                                 (trimmed-lengths (split-this-line))
                                                 lengths))
-                                 (next-line)))
+                                 (forward-line)))
                              lengths)))
           (let ((max-lengths (reduce
                               (lambda (list-a list-b)
