@@ -3,7 +3,7 @@
 ;; Author: Lennar Borgman
 ;; Created: Tue Jan 16 2007
 (defconst mlinks:version "0.28") ;;Version:
-;; Last-Updated: 2010-05-31 Mon
+;; Last-Updated: 2010-01-05 Tue
 ;; Keywords:
 ;; Compatibility:
 ;;
@@ -67,9 +67,8 @@
 
 (eval-when-compile (require 'cl))
 (eval-when-compile (require 'appmenu nil t))
-;;(eval-when-compile (require 'mumamo nil t))
-;;(eval-when-compile (require 'ourcomments-util nil t))
-;;(declare-function nxhtml-validation-header-mode "nxhtml-mode")
+(eval-when-compile (require 'mumamo nil t))
+(eval-when-compile (require 'ourcomments-util nil t))
 
 (require 'rx)
 (require 'url-parse)
@@ -126,12 +125,6 @@
      )
     ;; *scractch*
     (lisp-interaction-mode
-     ((goto mlinks-elisp-goto)
-      (hili mlinks-elisp-hili)
-      (hion t)
-      )
-     )
-    (debugger-mode
      ((goto mlinks-elisp-goto)
       (hili mlinks-elisp-hili)
       (hion t)
@@ -259,8 +252,6 @@
     (define-key m [(control ?c) ?\r ?c]    'mlinks-copy-link-text)
     m))
 
-(defvar mlinks-repeat-point-hilighter nil)
-
 ;;;###autoload
 (define-minor-mode mlinks-mode
   "Recognizes certain parts of a buffer as hyperlinks.
@@ -298,15 +289,8 @@ By default the link moved to will be active, see
   (if mlinks-mode
       (progn
         (mlinks-add-appmenu)
-        ;; Use post-command hook for debugging and a repeated idle timer otherwise
-        (if nil
-            (progn
-              (setq mlinks-repeat-point-hilighter nil)
-              (add-hook 'post-command-hook 'mlinks-start-point-hilighter nil t))
-          (setq mlinks-repeat-point-hilighter t)
-          (mlinks-start-point-hilighter))
+        (mlinks-start-point-hilighter)
         (mlinks-add-font-lock))
-    (remove-hook 'post-command-hook 'mlinks-start-point-hilighter t)
     (mlinks-stop-point-hilighter)
     (when mlinks-point-hilighter-overlay
       (when (overlayp mlinks-point-hilighter-overlay)
@@ -387,9 +371,7 @@ Any command cancels this state."
 (defun mlinks-start-point-hilighter ()
   (mlinks-stop-point-hilighter)
   (setq mlinks-point-hilighter-timer
-        (run-with-idle-timer 0.1
-                             mlinks-repeat-point-hilighter
-                             'mlinks-point-hilighter)))
+        (run-with-idle-timer 0.1 t 'mlinks-point-hilighter)))
 
 (defvar mlinks-link-overlay-priority 100)
 
@@ -399,7 +381,8 @@ Any command cancels this state."
           (make-overlay (car bounds) (cdr bounds)))
     (overlay-put mlinks-point-hilighter-overlay 'priority mlinks-link-overlay-priority)
     (overlay-put mlinks-point-hilighter-overlay 'mouse-face 'highlight)
-    (mlinks-set-normal-point-hilight)))
+    (mlinks-set-normal-point-hilight)
+    ))
 
 (defun mlinks-point-hilighter ()
   "Mark link at point if any.
@@ -414,11 +397,9 @@ This moves the hilight point overlay to point or deletes it."
   (when mlinks-mode
     (let ((bounds-- (mlinks-link-range (point))))
       (if bounds--
-          (progn
-            (if mlinks-point-hilighter-overlay
-                (move-overlay mlinks-point-hilighter-overlay (car bounds--) (cdr bounds--))
-              (mlinks-make-point-hilighter-overlay bounds--))
-            (overlay-put mlinks-point-hilighter-overlay 'window (selected-window)))
+          (if mlinks-point-hilighter-overlay
+              (move-overlay mlinks-point-hilighter-overlay (car bounds--) (cdr bounds--))
+            (mlinks-make-point-hilighter-overlay bounds--))
         (when mlinks-point-hilighter-overlay
           (delete-overlay mlinks-point-hilighter-overlay))))))
 
@@ -442,15 +423,13 @@ This moves the hilight point overlay to point or deletes it."
 
 (defun mlinks-point-hilighter-pre-command ()
   (condition-case err
-      (progn
-        (mlinks-start-point-hilighter)
-        (unless (let ((map (overlay-get mlinks-point-hilighter-overlay 'keymap)))
-                  (where-is-internal this-command
-                                     (list
-                                      map)))
-          (mlinks-set-normal-point-hilight)
-          (unless mlinks-point-hilighter-timer
-            (delete-overlay mlinks-point-hilighter-overlay))))
+      (unless (let ((map (overlay-get mlinks-point-hilighter-overlay 'keymap)))
+                (where-is-internal this-command
+                                   (list
+                                    map)))
+        (mlinks-set-normal-point-hilight)
+        (unless mlinks-point-hilighter-timer
+          (delete-overlay mlinks-point-hilighter-overlay)))
     (error (message "mlinks-point-hilighter-pre-command: %s" err))))
 (put 'mlinks-point-hilighter-pre-command 'permanent-local t)
 
@@ -1011,20 +990,11 @@ Uses `switch-to-buffer-other-frame'."
   (let ((symbol-- (intern-soft symbol-name--))
         defs--)
     (when (and symbol-- (boundp symbol--))
-      (add-to-list 'defs--
-                   ;;'variable
-                   'defvar
-                   ))
+      (add-to-list 'defs-- 'variable))
     (when (fboundp symbol--)
-      (add-to-list 'defs--
-                   ;;'function
-                   nil
-                   ))
+      (add-to-list 'defs-- 'function))
     (when (facep symbol--)
-      (add-to-list 'defs--
-                   ;;'face
-                   'defface
-                   ))
+      (add-to-list 'defs-- 'face))
     ;; Avoid some fails hits
     (when (memq symbol--
                 '(goto t
@@ -1047,31 +1017,30 @@ Uses `switch-to-buffer-other-frame'."
                           '(defvar defface))
                          (t
                           (error "Bad goto-- value: %s" goto--))))
-            (when (memq type defs--)
-              (condition-case err
-                  (add-to-list 'defs-places
-                               (cons
-                                type
-                                (save-excursion
-                                  (let* ((bp (find-definition-noselect symbol-- type))
-                                         (b (car bp))
-                                         (p (cdr bp)))
-                                    (unless p
-                                      (with-current-buffer b
-                                        (save-restriction
-                                          (widen)
-                                          (setq bp (find-definition-noselect symbol-- type)))))
-                                    bp))))
-                (error
-                 ;;(lwarn '(mlinks) :error "%s" (error-message-string err))
-                 (when t
-                   (cond
-                    ((eq (car err) 'search-failed))
-                    ((and (eq (car err) 'error)
-                          (string= (error-message-string err)
-                                   (format "Don't know where `%s' is defined" symbol--))))
-                    (t
-                     (message "%s: %s" (car err) (error-message-string err)))))))))
+            (condition-case err
+                (add-to-list 'defs-places
+                             (cons
+                              type
+                              (save-excursion
+                                (let* ((bp (find-definition-noselect symbol-- type))
+                                       (b (car bp))
+                                       (p (cdr bp)))
+                                  (unless p
+                                    (with-current-buffer b
+                                      (save-restriction
+                                        (widen)
+                                        (setq bp (find-definition-noselect symbol-- type)))))
+                                  bp))))
+              (error
+               ;;(lwarn '(mlinks) :error "%s" (error-message-string err))
+               (when t
+                 (cond
+                  ((eq (car err) 'search-failed))
+                  ((and (eq (car err) 'error)
+                        (string= (error-message-string err)
+                                 (format "Don't know where `%s' is defined" symbol--))))
+                  (t
+                   (message "%s: %s" (car err) (error-message-string err))))))))
           (if (= 1 (length defs-places))
               (setq def (car defs-places))
             (let ((many nil)
@@ -1330,11 +1299,10 @@ Uses `switch-to-buffer-other-frame'."
                                     1))))
         (setq next-fontified-to (min (+ fontified-to 5000)
                                      (point-max)))
-        ;;(mumamo-with-buffer-prepared-for-jit-lock
-        (with-silent-modifications
-          (progn
-            (put-text-property fontified-to next-fontified-to 'fontified t)
-            (font-lock-fontify-region fontified-to next-fontified-to)))
+        (mumamo-with-buffer-prepared-for-jit-lock
+         (progn
+           (put-text-property fontified-to next-fontified-to 'fontified t)
+           (font-lock-fontify-region fontified-to next-fontified-to)))
         (setq fontified-to (next-single-char-property-change (1- next-fontified-to)
                                                              'fontified))
         (setq fontified-all (not fontified-to))
@@ -1374,11 +1342,10 @@ Uses `switch-to-buffer-other-frame'."
               (unless ready (setq pos nil))))
         (setq next-fontified-from (max (- fontified-from 5000)
                                        (point-min)))
-        ;;(mumamo-with-buffer-prepared-for-jit-lock
-        (with-silent-modifications
-          (progn
-            (put-text-property next-fontified-from fontified-from 'fontified t)
-            (font-lock-fontify-region next-fontified-from fontified-from)))
+        (mumamo-with-buffer-prepared-for-jit-lock
+         (progn
+           (put-text-property next-fontified-from fontified-from 'fontified t)
+           (font-lock-fontify-region next-fontified-from fontified-from)))
         (setq fontified-from (previous-single-char-property-change
                               (1+ next-fontified-from) 'fontified))
         (setq fontified-all (not fontified-from))

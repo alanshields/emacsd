@@ -2,15 +2,14 @@
 ;;
 ;; Author: Lennart Borgman <lennart dot borgman at gmail dot com>
 ;; Created: Wed Feb 21 2007
-(defconst ourcomments-util:version "0.30") ;;Version:
-;; Last-Updated: 2010-05-29 Sat
+(defconst ourcomments-util:version "0.25") ;;Version:
+;; Last-Updated: 2009-08-04 Tue
 ;; Keywords:
 ;; Compatibility: Emacs 22
 ;;
 ;; Features that might be required by this library:
 ;;
-;;   `backquote', `bytecomp', `cus-edit', `cus-face', `cus-load',
-;;   `cus-start', `wid-edit'.
+;;   None
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -45,8 +44,6 @@
 ;;
 ;;; Code:
 
-;;(defconst ourcomments-load-time-start (float-time))
-;;(message " ourcomments a %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 (eval-when-compile (require 'apropos))
 (eval-when-compile (require 'bookmark))
 (eval-when-compile (require 'cl))
@@ -56,10 +53,7 @@
 (eval-when-compile (require 'recentf))
 (eval-when-compile (require 'uniquify))
 
-(declare-function 'ido-mode "ido" '(&optional args) t)
-
-(eval-when-compile (require 'cus-edit))
-;;(message " ourcomments b %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
+(require 'cus-edit)
 
 ;; (ourcomments-indirect-fun 'html-mumamo)
 ;; (ourcomments-indirect-fun 'html-mumamo-mode)
@@ -456,56 +450,6 @@ With prefix ARG fill only current line."
       (push-mark from nil t)
       (goto-char to))))
 
-;;;###autoload
-(defun major-or-multi-majorp (value)
-  "Return t if VALUE is a major or multi major mode function."
-  (or (and (fboundp 'mumamo-multi-major-modep)
-           (fboundp (mumamo-multi-major-modep value)))
-      (major-modep value)))
-
-;; Fix-me: This might in the future be defined in Emacs.
-;;;###autoload
-(defun major-modep (value)
-  "Return t if VALUE is a major mode function."
-  (let ((sym-name (symbol-name value)))
-    ;; Do some reasonable test to find out if it is a major mode.
-    ;; Load autoloaded mode functions.
-    ;;
-    ;; Fix-me: Maybe test for minor modes? How was that done?
-    (when (and (fboundp value)
-               (commandp value)
-               (not (memq value '(flyspell-mode
-                                  isearch-mode
-                                  savehist-mode
-                                  )))
-               (< 5 (length sym-name))
-               (string= "-mode" (substring sym-name (- (length sym-name) 5)))
-               (if (and (listp (symbol-function value))
-                        (eq 'autoload (car (symbol-function value))))
-                   (progn
-                     (message "loading ")
-                     (load (cadr (symbol-function value)) t t))
-                 t)
-               (or (memq value
-                         ;; Fix-me: Complement this table of known major modes:
-                         '(fundamental-mode
-                           xml-mode
-                           nxml-mode
-                           nxhtml-mode
-                           css-mode
-                           javascript-mode
-                           espresso-mode
-                           php-mode
-                           ))
-                   (and (intern-soft (concat sym-name "-hook"))
-                        ;; This fits `define-derived-mode'
-                        (get (intern-soft (concat sym-name "-hook")) 'variable-documentation))
-                   (progn (message "Not a major mode: %s" value)
-                          ;;(sit-for 4)
-                          nil)
-                   ))
-      t)))
-
 ;; (rassq 'genshi-nxhtml-mumamo-mode mumamo-defined-turn-on-functions)
 ;; (major-modep 'nxhtml-mode)
 ;; (major-modep 'nxhtml-mumamo-mode)
@@ -566,8 +510,6 @@ If in a widget field stay in that."
                (< (point) (widget-field-start field)))
       (goto-char (widget-field-start field)))))
 (put 'ourcomments-move-beginning-of-line 'CUA 'move)
-
-;;(message " ourcomments c %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;###autoload
 (defun ourcomments-move-end-of-line(arg)
@@ -968,7 +910,6 @@ what they will do ;-)."
 (defvar better-bottom-angles-defaults nil)
 (defun better-fringes-bottom-angles (on)
   ;;(bottom bottom-left-angle bottom-right-angle top-right-angle top-left-angle)
-  ;;(message " better-fringes-bottom a %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (if (not on)
       (when better-bottom-angles-defaults
         (set-default 'fringe-indicator-alist better-bottom-angles-defaults))
@@ -982,12 +923,9 @@ what they will do ;-)."
           ;;(indicators (copy-list fringe-indicator-alist)))
           (indicators (copy-sequence fringe-indicator-alist)))
       (setq indicators (assq-delete-all 'bottom indicators))
-      (set-default 'fringe-indicator-alist (cons better indicators))))
-  ;;(message " better-fringes-bottom b %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
-  )
+      (set-default 'fringe-indicator-alist (cons better indicators)))))
 
 (defun better-fringes-faces (face face-important)
-  ;;(message " better-fringes-faces a %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (dolist (bitmap '(bottom-left-angle
                     bottom-right-angle
                     top-left-angle
@@ -1001,12 +939,9 @@ what they will do ;-)."
                     left-bracket right-bracket
                     empty-line))
     (set-fringe-bitmap-face bitmap face))
-  ;;(message " better-fringes-faces b %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
   (dolist (bitmap '(right-triangle
                     question-mark))
-    (set-fringe-bitmap-face bitmap face-important))
-  ;;(message " better-fringes-faces c %.1f seconds elapsed" (- (float-time) nxhtml-load-time-start))
-  )
+    (set-fringe-bitmap-face bitmap face-important)))
 
 (defface better-fringes-bitmap
   '((t (:foreground "dark khaki")))
@@ -1040,8 +975,6 @@ what they will do ;-)."
 ;; After an idea from andrea on help-gnu-emacs
 
 (defvar ourcomments-copy+paste-point nil)
-
-;;(message " ourcomments d %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;(global-set-key [(control ?c) ?y] 'ourcomments-copy+paste-set-point)
 ;;;###autoload
@@ -1217,47 +1150,31 @@ customize it."
   (insert (format-time-string ourcomments-insert-date-and-time)))
 
 ;;;###autoload
-(defun ediff-emacs-other-file ()
-  "Ediff installed and source Emacs lisp file.
-Works like `find-emacs-other-file' but also starts ediff."
-  (interactive)
-  (let ((orig-buffer (current-buffer))
-        (orig-rel-src (file-relative-name buffer-file-name source-directory))
-        (other-buffer (find-file-noselect (find-emacs-other-file buffer-file-name))))
-    (if (string= "../" (substring orig-rel-src 0 3))
-        (ediff-buffers orig-buffer other-buffer)
-      (ediff-buffers other-buffer orig-buffer))))
-
-;;;###autoload
-(defun find-emacs-other-file (elisp-file)
+(defun find-emacs-other-file (display-file)
   "Find corresponding file to source or installed elisp file.
 If you have checked out and compiled Emacs yourself you may have
 Emacs lisp files in two places, the checked out source tree and
-the installed Emacs tree.  If ELISP-FILE is an Emacs elisp file
+the installed Emacs tree.  If buffer contains an Emacs elisp file
 in one of these places then find the corresponding elisp file in
-the other place.
+the other place. Return the file name of this file.
 
-When interactive set ELISP-FILE to `buffer-file-name'.  Rename
-current buffer using your `uniquify-buffer-name-style' if it is
-set.  Display the other file in the other window and go to the
-same line number as in the current buffer.  Return the other
-files buffer.
+Rename current buffer using your `uniquify-buffer-name-style' if
+it is set.
 
-If non-interactive do not open the other file, just return the
-file name of the other file."
-  (interactive (progn
-                 (unless (buffer-file-name)
-                   (error "This buffer is not visiting a file"))
-                 (list buffer-file-name)))
+When DISPLAY-FILE is non-nil display this file in other window
+and go to the same line number as in the current buffer."
+  (interactive (list t))
+  (unless (buffer-file-name)
+    (error "This buffer is not visiting a file"))
   (unless source-directory
     (error "Can't find the checked out Emacs sources"))
   (let* ((installed-directory (file-name-as-directory
                                (expand-file-name ".." exec-directory)))
          (relative-installed (file-relative-name
-                              elisp-file installed-directory))
+                              (buffer-file-name) installed-directory))
          (relative-source (file-relative-name
-                           elisp-file source-directory))
-         (name-nondir (file-name-nondirectory elisp-file))
+                           (buffer-file-name) source-directory))
+         (name-nondir (file-name-nondirectory (buffer-file-name)))
          source-file
          installed-file
          other-file
@@ -1280,13 +1197,12 @@ file name of the other file."
       (error "This file is not in Emacs source or installed lisp tree"))
     (unless (file-exists-p other-file)
       (error "Can't find the corresponding file %s" other-file))
-    (if (not (called-interactively-p t))
-        other-file
+    (when display-file
       (when uniquify-buffer-name-style
         (rename-buffer (file-name-nondirectory buffer-file-name) t))
       (find-file-other-window other-file)
-      (ourcomments-goto-line line-num)
-      (current-buffer))))
+      (ourcomments-goto-line line-num))
+    other-file))
 
 ;;;###autoload
 (defun ourcomments-ediff-files (def-dir file-a file-b)
@@ -1387,73 +1303,24 @@ PREDICATE.  PREDICATE takes one argument, the symbol."
 
 ;;;###autoload
 (defun narrow-to-comment ()
-  "Narrow to current comments."
   (interactive)
-  (let ((range (ourcomments-find-comments-range (point))))
-    (if (not range)
-        (message "Can't narrow to comment because not in a comment")
-      (narrow-to-region (car range) (cdr range)))))
-
-;;;###autoload
-(defun narrow-to-defun+comments-above ()
-  "Like `narrow-to-defun' but include comments above.
-See also `widen-to-comments-above'."
-  (interactive)
-  (narrow-to-defun)
-  (widen-to-comments-above))
-
-;;;###autoload
-(defun widen-to-comments-above ()
-  "Widen to include comments above current narrowing.
-See also `narrow-to-defun+comments-above'."
-  (interactive)
-  (let ((here (point))
-        (beg (point-min))
-        (end (point-max))
-        new-beg)
-    (unless (= 1 beg)
-      (widen)
-      (when (setq new-beg (car (ourcomments-find-comments-range (1- beg))))
-        (setq beg new-beg)))
-    (narrow-to-region beg end)
-    (if new-beg
-        (progn
-          (set-window-point (selected-window) new-beg)
-          (redisplay t)
-          (goto-char here)
-          (message "Widened to comments above"))
-      (message "There is no comments immediately above"))))
-
-(defun ourcomments-find-comments-range (pos)
   (let* ((here (point-marker))
-         (in-comment (syntax-ppss-context (syntax-ppss pos))))
-    (unless (eq in-comment 'comment)
-      ;; It looks like the wrong syntax-table is used here: (message
-      ;;"skipped %s " (skip-chars-forward "[:space:]")) See Emacs bug
-      ;;3823, http://debbugs.gnu.org/cgi/bugreport.cgi?bug=3823
-      (skip-chars-backward " \t\r\n")
-      (unless (bobp) (backward-char))
-      (setq in-comment (syntax-ppss-context (syntax-ppss))))
-    (unless (eq in-comment 'comment)
-      (goto-char pos)
-      (skip-chars-forward " \t\r\n")
-      (unless (eobp) (forward-char 1))
-      (setq in-comment (syntax-ppss-context (syntax-ppss))))
-    (when (eq in-comment 'comment)
-      (let* ((syntax (syntax-ppss))
-             (beg (nth 8 syntax))
-             end)
-        (goto-char beg)
-        (while (forward-comment -1)
-          (setq beg (point)))
-        (goto-char beg)
-        (skip-chars-backward " \t")
-        (when (bolp) (setq beg (point)))
-        (goto-char beg)
-        (while (forward-comment 1)
-          (setq end (point)))
-        (goto-char here)
-        (cons beg end)))))
+         (size 1000)
+         (beg (progn (forward-comment (- size))
+                     ;; It looks like the wrong syntax-table is used here:
+                     ;;(message "skipped %s " (skip-chars-forward "[:space:]"))
+                     ;; See Emacs bug 3823, http://debbugs.gnu.org/cgi/bugreport.cgi?bug=3823
+                     (message "skipped %s " (skip-chars-forward " \t\r\n"))
+                     (point)))
+         (end (progn (forward-comment size)
+                     ;;(message "skipped %s " (skip-chars-backward "[:space:]"))
+                     (message "skipped %s " (skip-chars-backward " \t\r\n"))
+                     (point))))
+    (goto-char here)
+    (if (not (and (>= here beg)
+                  (<= here end)))
+        (error "Not in a comment")
+      (narrow-to-region beg end))))
 
 (defvar describe-symbol-alist nil)
 
@@ -1538,8 +1405,6 @@ The can include 'variable, 'function and variaus 'cl-*."
        (or (and (get symbol 'custom-loads)
                 (not (get symbol 'custom-autoload)))
            (get symbol 'custom-group))))
-
-;;(message " ourcomments e %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;###autoload
 (defun describe-custom-group (symbol)
@@ -1904,35 +1769,6 @@ of those in for example common web browsers."
 
 (defvar ourcomments-restart-server-mode nil)
 
-(defvar emacs-restart-in-kill-fun nil)
-;;(setq emacs-restart-in-kill-fun 'emacs-start-under-gdb)
-
-(defvar emacs-start-under-gdb-shell-file nil)
-(setq emacs-start-under-gdb-shell-file "c:/u/gdb-emacs.cmd")
-
-;;(emacs-start-under-gdb)
-(defun emacs-start-under-gdb (&rest args)
-  (interactive)
-  (unless (eq system-type 'windows-nt)
-    (unless (y-or-n-p "Sorry, this version maybe just works under w32. Enhancements welcome. Continue? ")
-      (throw 'command-level nil)))
-  (recentf-save-list)
-  (setq args (cons (ourcomments-find-emacs) args))
-  (let* ((args-text (mapconcat 'identity (cons "" args) " "))
-         (this-emacs (ourcomments-find-emacs))
-         ret
-         (gdb (locate-file "gdb" exec-path exec-suffixes))
-         (default-directory (expand-file-name "src" source-directory)))
-    ;; (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/k"
-    ;;               (concat "start gdb -ex=run --args " (ourcomments-find-emacs)
-    ;;                       " " args-text))
-    ;; (call-process "c:/u/gdb-emacs.cmd" nil 0 nil)
-    ;; (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/k" "start c:/u/gdb-emacs.cmd")
-    (if (eq system-type 'windows-nt)
-        (call-process (locate-file "cmd.exe" exec-path) nil 0 nil "/c" "start" emacs-start-under-gdb-shell-file)
-      (call-process shell-file-name emacs-start-under-gdb-shell-file))
-    ret))
-
 (defun emacs-restart-in-kill ()
   "Last step in restart Emacs and start `server-mode' if on before."
   (let* ((restart-args (when ourcomments-restart-server-mode
@@ -1950,9 +1786,7 @@ of those in for example common web browsers."
     ;; Fix-me: Adding -nw to restart in console does not work. Any way to fix it?
     (unless window-system (setq restart-args (cons "-nw" restart-args)))
     ;;(apply 'call-process (ourcomments-find-emacs) nil 0 nil restart-args)
-    (if emacs-restart-in-kill-fun
-        (apply emacs-restart-in-kill-fun restart-args)
-      (apply 'emacs restart-args))
+    (apply 'emacs restart-args)
     ;; Wait to give focus to new Emacs instance:
     (sleep-for 3)))
 
@@ -1998,14 +1832,14 @@ See also `ourcomments-started-emacs-use-output-buffer'."
     (when out-buf
       (display-buffer out-buf)
       (setq fin-msg ". Finished.")
-      (message "Started 'emacs%s' => %s. Locked until this is finished." args-text ret)
+      (message "Started 'emacs%s' => %s. Locked until this is finished." args-text ret fin-msg)
       (redisplay))
     (setq ret (apply 'call-process (ourcomments-find-emacs) nil buf-arg nil args))
     (message "Started 'emacs%s' => %s%s" args-text ret fin-msg)
     ret))
 
 ;;;###autoload
-(defun emacs-buffer-file(&rest args)
+(defun emacs-buffer-file()
   "Start a new Emacs showing current buffer file.
 Go to the current line and column in that file.
 If there is no buffer file then instead start with `dired'.
@@ -2018,8 +1852,8 @@ the file or a call to dired."
         (lin (line-number-at-pos))
         (col (current-column)))
     (if file
-        (apply 'emacs "--no-desktop" (format "+%d:%d" lin col) file args)
-      (apply 'emacs "--no-desktop" "--eval" (format "(dired \"%s\")" default-directory) args))))
+        (apply 'emacs "--no-desktop" (format "+%d:%d" lin col) file nil)
+      (applay 'emacs "--no-desktop" "--eval" (format "(dired \"%s\")" default-directory nil)))))
 
 ;;;###autoload
 (defun emacs--debug-init(&rest args)
@@ -2054,7 +1888,6 @@ This calls the function `emacs' with added arguments ARGS."
                                        exec-directory))))
     (apply 'emacs-Q "--debug-init" "--load" autostart args)))
 
-;;(message " ourcomments f %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Searching
@@ -2152,8 +1985,6 @@ See `tags-query-replace' for DELIMETED and more information."
                           (string= "/.." (substring subdir -3)))))
         (setq files (append files (rdir-get-files subdir file-regexp) nil))))
     files))
-
-;;(message " ourcomments f1 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 (defun dir-replace-read-parameters (has-dir recursive)
   (let* ((common
@@ -2256,12 +2087,9 @@ Return full path if found."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Custom faces and keys
 
-;;(message " ourcomments f2 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
-
 ;;;###autoload
 (defun use-custom-style ()
   "Setup like in `Custom-mode', but without things specific to Custom."
-  (require 'cus-edit)
   (make-local-variable 'widget-documentation-face)
   (setq widget-documentation-face 'custom-documentation)
   (make-local-variable 'widget-button-face)
@@ -2321,61 +2149,6 @@ Return full path if found."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Org Mode
-
-;; (define-minor-mode ourcomments-org-where-mode
-;;   "Shows path in header line."
-;;   :global nil
-;;   :group 'ourcomments-util
-;;   :group 'org
-;;   (if ourcomments-org-where-mode
-;;       ;;Turn it on
-;;       (ourcomments-org-where-mode-start)
-;;     ;; Turn it off
-;;     (ourcomments-org-where-mode-stop)
-;;     ))
-;; (put 'ourcomments-org-where-mode 'permanent-local t)
-
-(defun ourcomments-org-beginning-of-defun (arg)
-  "Find previous header start.
-If ARG is positive then search that many times backward, else forward.
-
-This is the function is used for `beginning-of-defun-function'."
-  (let ((here (point))
-        on-heading)
-    (outline-back-to-heading)
-    (setq on-heading (= here (point)))
-    (if (< 0 arg)
-        (progn
-          (unless on-heading (setq arg (1- arg)))
-          ;; See `outline-backward-same-level'.
-          (while (> arg 0)
-            (let ((here2 (point))
-                  (point-to-move-to (outline-get-last-sibling)))
-              (if point-to-move-to
-                  (progn
-                    (goto-char point-to-move-to)
-                    (setq arg (1- arg)))
-                (setq arg 0)
-                (goto-char here2)))))
-      ;;(forward-char)
-      (outline-forward-same-level (- arg)))))
-
-;;(message " ourcomments f3 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
-
-(defun ourcomments-org-end-of-defun ()
-  "Find next header start.
-This function is used for `end-of-defun-function'."
-  (org-end-of-subtree t t)
-  (backward-char)
-  )
-
-(defun ourcomments-org-set-beginning-and-end-defuns ()
-  "Setup beginning and end of defun functions for `org-mode'."
-  (unless (local-variable-p 'beginning-of-defun-function)
-    (set (make-local-variable 'beginning-of-defun-function) 'ourcomments-org-beginning-of-defun)
-    (set (make-local-variable 'end-of-defun-function) 'ourcomments-org-end-of-defun)))
-
-(add-hook 'org-mode-hook 'ourcomments-org-set-beginning-and-end-defuns)
 
 (defun ourcomments-org-complete-and-replace-file-link ()
   "If on a org file link complete file name and replace it."
@@ -2457,9 +2230,6 @@ This function is used for `end-of-defun-function'."
 ;;(string-match-p ourcomments-org-paste-html-link-regexp "<a href=\"link\">text</a>")
 
 ;;(defvar temp-n 0)
-
-;;(message " ourcomments f4 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
-
 (defun ourcomments-org-convert-html-links-in-buffer (beg end)
   "Convert html link between BEG and END to org mode links.
 If there is an html link in the buffer
@@ -2516,8 +2286,6 @@ variant of such blocks then leave the link as it is."
             (replace-match (concat "[[" url "][" str "]]") nil nil nil 0)))
         (goto-char here)
         nil))))
-
-;;(message " ourcomments g2 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 (defvar ourcomments-paste-with-convert-hook nil
   "Normal hook run after certain paste commands.
@@ -2590,7 +2358,6 @@ Note: This minor mode will defadvice the paste commands."
 ;; (ad-unadvise 'cua-paste)
 
 
-;;(message " ourcomments g3 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Menu commands to M-x history
@@ -2602,7 +2369,6 @@ Note: This minor mode will defadvice the paste commands."
 ;; (setq extended-command-history nil)
 (defun ourcomments-M-x-menu-pre ()
   "Add menu command to M-x history."
-  ;;(message "M-x-menu-pre: %s" (this-command-keys-vector))
   (let ((is-menu-command (equal '(menu-bar)
                                 (when (< 0 (length (this-command-keys-vector)))
                                   (elt (this-command-keys-vector) 0))))
@@ -2614,12 +2380,9 @@ Note: This minor mode will defadvice the paste commands."
         ;; This message is given pre-command and is therefore likely
         ;; to be overwritten, but that is ok in this case. If the user
         ;; has seen one of these messages s?he knows.
-
-        (let ((msg
-               (format "(Added %s to M-x history so you can run it from there)"
-                       this-command)))
-          (with-temp-message (propertize msg 'face 'file-name-shadow)
-            (sit-for 3)))))))
+        (message (propertize "(Added %s to M-x history so you can run it from there)"
+                             'face 'file-name-shadow)
+                 this-command)))))
 
 ;;;###autoload
 (define-minor-mode ourcomments-M-x-menu-mode
@@ -2633,8 +2396,6 @@ Only commands that are not already in M-x history are added."
   (if ourcomments-M-x-menu-mode
       (add-hook 'pre-command-hook 'ourcomments-M-x-menu-pre)
     (remove-hook 'pre-command-hook 'ourcomments-M-x-menu-pre)))
-
-;;(message " ourcomments g4 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Warnings etc
@@ -2660,41 +2421,6 @@ Only commands that are not already in M-x history are added."
   (add-hook 'post-command-hook 'ourcomments-warning-post))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Windmove
-
-;;(message " ourcomments g5 %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
-
-(defcustom ourcomments-windmove-mode-modifier 'meta
-  "Modifier for windmove key bindings.
-Used as in `windmove-default-keybindings' but for
-`ourcomments-windmove-mode'."
-  :type '(choice (const meta)
-                 (const control))
-  :group 'windmove)
-
-(defvar ourcomments-windmove-mode-map
-  (let ((map (make-sparse-keymap))
-        (modifier 'meta))
-    (define-key map (vector (list modifier 'left))  'windmove-left)
-    (define-key map (vector (list modifier 'right)) 'windmove-right)
-    (define-key map (vector (list modifier 'up))    'windmove-up)
-    (define-key map (vector (list modifier 'down))  'windmove-down)
-    map))
-
-(define-minor-mode ourcomments-windmove-mode
-  "Make windmove bindings a minor mode.
-`windmove-default-keybindings' defines key bindings in
-`global-map'.  Those can then be overrided by major mode
-bindings, which mayb be quite inconvenient since the user
-probably frequently uses the windmove keybindings.
-
-This minor mode therefore instead defines them in a minor mode."
-  :global t
-  :group 'windmove)
-
-
-;;(message " ourcomments fin %.1f seconds elapsed" (- (float-time) ourcomments-load-time-start))
 
 (provide 'ourcomments-util)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

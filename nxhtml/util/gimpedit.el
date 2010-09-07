@@ -47,8 +47,7 @@
 ;;
 ;;; Code:
 
-(require 'w32-regdat nil t)
-(declare-function w32-regdat-gimp-win-remote-cmd "w32-regdat")
+(eval-and-compile (require 'w32-regdat nil t))
 
 ;; (message "%S" (gimpedit-get-remote-command))
 (defun gimpedit-get-remote-command ()

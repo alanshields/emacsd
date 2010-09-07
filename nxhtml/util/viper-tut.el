@@ -692,8 +692,7 @@ between you will be notified about that too."
   You can not run the Viper tutorial in this Emacs because you
   have not enabled Viper.
 
-  Do you want to run the Viper tutorial in a new Emacs? ")
-            (resize-mini-windows (or resize-mini-windows t)))
+  Do you want to run the Viper tutorial in a new Emacs? "))
         (if (y-or-n-p prompt)
             (let ((ret (funcall 'emacs--no-desktop
                                 "-eval"

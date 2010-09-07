@@ -46,14 +46,13 @@
 
 (require 'iss-mode)
 (require 'mumamo)
-(declare-function nxhtml-validation-header-mode "nxhtml-mode")
 
-(defun mumamo-chunk-iss-code (pos max)
+(defun mumamo-chunk-iss-code (pos min max)
   "Find [code]..., return range and `pascal-mode'.
-See `mumamo-possible-chunk-forward' for POS and MAX.
+See `mumamo-find-possible-chunk' for POS, MIN and MAX.
 
 Note that if this section is not the last"
-  (mumamo-quick-chunk-forward pos max "[code]" "{*** End of CODE **}" 'borders 'pascal-mode))
+  (mumamo-quick-static-chunk pos min max "[code]" "{*** End of CODE **}" t 'pascal-mode t))
 
 ;;;###autoload
 (define-mumamo-multi-major-mode iss-mumamo-mode

@@ -347,22 +347,18 @@ If value is a number then delay message that number of seconds."
              (appmenu-remove 'tabkey2))))
   :group 'tabkey2)
 
-;; (defun yas/expandable-at-point ()
-;;   "Return non-nil if a snippet can be expanded here."
-;;   (when (and (fboundp 'yas/template-condition-predicate)
-;;              (boundp 'yas/buffer-local-condition))
-;;     (yas/template-condition-predicate
-;;      yas/buffer-local-condition)))
-
 (defun yas/expandable-at-point ()
- "Return non-nil if a snippet can be expanded here."
- (car (yas/current-key)))
+  "Return non-nil if a snippet can be expanded here."
+  (when (and (fboundp 'yas/template-condition-predicate)
+             (boundp 'yas/buffer-local-condition))
+    (yas/template-condition-predicate
+     yas/buffer-local-condition)))
 
 (defvar tabkey2-company-backends
   "List of frontends and their backends."
   '((company-mode (NONE                   company-abbrev . "Abbrev")
                   (NONE                   company-css . "CSS")
-                  (dabbrev-expand         company-dabbrev . "dabbrev for plain text")
+                  (dabbrev-expan          company-dabbrev . "dabbrev for plain text")
                   (NONE                   company-dabbrev-code . "dabbrev for code")
                   (NONE                   company-eclim . "eclim (an Eclipse interace)")
                   (lisp-symbol-complete   company-elisp . "Emacs Lisp")
@@ -386,30 +382,27 @@ If value is a number then delay message that number of seconds."
 
 (defcustom tabkey2-completion-functions
   '(
-    ("Emacs default completion" completion-at-point completion-at-point-functions)
     ;; Front ends (should take care of the rest, ie temporary things,
     ;; snippets etc...)
     ("Company Mode completion" company-complete company-mode)
     ;; Temporary things
-    ("Spell check word" flyspell-correct-word-before-point nil)
+    ("Spell check word" flyspell-correct-word-before-point)
     ;; Snippets
     ("Yasnippet" yas/expand (yas/expandable-at-point))
     ;; Main mode related, often used
     ("Semantic Smart Completion" senator-complete-symbol senator-minor-mode)
-    ("Programmable completion" pcomplete (and (boundp 'pcomplete-parse-arguments-function)
-                                              pcomplete-parse-arguments-function))
-    ("nXML completion" nxml-complete (derived-mode-p 'nxml-mode))
-    ("Complete Emacs symbol" lisp-complete-symbol (and (derived-mode-p 'emacs-lisp-mode)
-                                                       (not (fboundp 'completion-at-point))))
-    ("Widget complete" widget-complete nil)
-    ("Comint Dynamic Complete" comint-dynamic-complete nil)
-    ("PHP completion" php-complete-function php-mode)
-    ("Tags completion" complete-tag nil)
+    ("Programmable completion" pcomplete)
+    ("nXML completion" nxml-complete)
+    ("Complete Emacs symbol" lisp-complete-symbol)
+    ("Widget complete" widget-complete)
+    ("Comint Dynamic Complete" comint-dynamic-complete)
+    ("PHP completion" php-complete-function)
+    ("Tags completion" complete-tag)
     ;; General word completion
     ("Predictive word" complete-word-at-point predictive-mode)
     ("Predictive abbreviations" pabbrev-expand-maybe)
-    ("Dynamic word expansion" dabbrev-expand t (setq dabbrev--last-abbrev-location nil))
-    ("Ispell complete word" ispell-complete-word t)
+    ("Dynamic word expansion" dabbrev-expand nil (setq dabbrev--last-abbrev-location nil))
+    ("Ispell complete word" ispell-complete-word)
     ;; The catch all
     ("Anything" anything (commandp 'anything))
     )
@@ -427,8 +420,7 @@ COMPLETION-FUNCTION is the completion function symbol.
 The entry is considered active if the symbol COMPLETION-FUNCTION
 is bound to a command and
 
-  - This function has a key binding at point and ACTIVE-FORM is
-  equal to nil.
+  - This function has a key binding at point.
 
 or
 
@@ -718,29 +710,23 @@ Otherwise return nil."
 Return t if CHK is a symbol with non-nil value or a form that
 evals to non-nil.
 
-Otherwise return t if CHK is equal to nil and FUN has a key
-binding at point."
+Otherwise return t if FUN has a key binding at point."
   (when (and (fboundp fun)
              (commandp fun))
     (or (if (symbolp chk)
             (when (boundp chk) (symbol-value chk))
           (eval chk))
-        (and (eq nil chk)
-             (let* ((emulation-mode-map-alists
-                     ;; Remove keymaps from tabkey2 in this copy:
-                     (delq 'tabkey2--emul-keymap-alist
-                           (copy-sequence emulation-mode-map-alists)))
-                    (keys (tabkey2-symbol-keys fun))
-                    kb-bound)
-               (dolist (key keys)
-                 (unless (memq (car (append key nil))
-                               '(menu-bar))
-                   (setq kb-bound t)))
-               kb-bound))
-        (let ((map (get-char-property (point) 'keymap)))
-          (when map
-            (where-is-internal fun (list map))))
-        )))
+        (let* ((emulation-mode-map-alists
+                ;; Remove keymaps from tabkey2 in this copy:
+                (delq 'tabkey2--emul-keymap-alist
+                      (copy-sequence emulation-mode-map-alists)))
+               (keys (tabkey2-symbol-keys fun))
+               kb-bound)
+          (dolist (key keys)
+            (unless (memq (car (append key nil))
+                          '(menu-bar))
+              (setq kb-bound t)))
+          kb-bound))))
 
 (defun tabkey2-is-active-p (fun)
   "Return FUN is active.
@@ -851,8 +837,7 @@ See `tabkey2-first' for more information."
     (when (and (boundp 'company-mode)
                company-mode)
       ;;(message "tabkey2:company-abort")
-      (when (fboundp 'company-abort)
-        (company-abort))
+      (company-abort)
       (setq did-more t))
     (when (and C-g-binding
              (not (eq C-g-binding this-command)))

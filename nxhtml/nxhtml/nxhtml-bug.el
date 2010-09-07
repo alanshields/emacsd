@@ -44,9 +44,7 @@
 ;;
 ;;; Code:
 
-(require 'nxhtml-base)
-(eval-and-compile (require 'nxhtml-menu nil t))
-(declare-function nxhtml-validation-header-mode "nxhtml-mode")
+(eval-when-compile (require 'nxhtml-menu nil t))
 
 (require 'sendmail)
 

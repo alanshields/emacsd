@@ -3,9 +3,9 @@
 (require 'mumamo)
 
 (eval-and-compile
-  (defun mumamo-chunk-embjava (pos max)
+  (defun mumamo-chunk-embjava (pos min max)
     "Find JAVA_ON ... JAVA_OFF, return range and java-mode."
-    (mumamo-quick-chunk-forward pos max "JAVA_ON" "JAVA_OFF" nil 'java-mode))
+    (mumamo-quick-static-chunk pos min max "JAVA_ON" "JAVA_OFF" nil 'java-mode nil))
   )
 
 (define-mumamo-multi-major-mode bug271497-mumamo

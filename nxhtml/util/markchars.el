@@ -3,14 +3,14 @@
 ;; Author: Lennart Borgman (lennart O borgman A gmail O com)
 ;; Created: 2010-03-22 Mon
 ;; Version:
-;; Last-Updated: 2010-06-01 Tue
+;; Last-Updated: 2010-03-25 Thu
 ;; URL:
 ;; Keywords:
 ;; Compatibility:
 ;;
 ;; Features that might be required by this library:
 ;;
-;;   `idn', `nxhtml-base'.
+;;   Required feature `markchars' was not provided.
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
