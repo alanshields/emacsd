@@ -17,21 +17,26 @@
 ;(require 'rails)
 
 ;; SLIME
-(let ((slime-dir "/opt/local/share/emacs/site-lisp/slime"))
-  (when (file-exists-p slime-dir)
-    (setq load-path (cons slime-dir load-path))
-    (require 'slime-autoloads)
-    (eval '(setq slime-lisp-implementations
-                 `((sbcl ("/opt/local/bin/sbcl"))
-                   (clisp ("/opt/local/bin/clisp")))))
-    (add-hook 'lisp-mode-hook
-	      (lambda ()
-		(cond ((not (featurep 'slime))
-		       (require 'slime) 
-		       (normal-mode)))))))
+;; (let ((slime-dir "/opt/local/share/emacs/site-lisp/slime"))
+;;   (when (file-exists-p slime-dir)
+;;     (setq load-path (cons slime-dir load-path))
+;;     (require 'slime-autoloads)
+;;     (eval '(setq slime-lisp-implementations
+;;                  `((sbcl ("/opt/local/bin/sbcl"))
+;;                    (clisp ("/opt/local/bin/clisp")))))
+;;     (add-hook 'lisp-mode-hook
+;; 	      (lambda ()
+;; 		(cond ((not (featurep 'slime))
+;; 		       (require 'slime) 
+;; 		       (normal-mode)))))))
+;; (eval-after-load "slime"
+;;    '(slime-setup '(slime-fancy slime-banner)))
 
-(eval-after-load "slime"
-   '(slime-setup '(slime-fancy slime-banner)))
+;; Package-install
+(require 'package)
+(add-to-list 'package-archives
+             '("technomancy" . "http://repo.technomancy.us/emacs/") t)
+(package-initialize)
 
 ;; SGML stuff
 (setq sgml-set-face t)
@@ -244,6 +249,7 @@
     (save-restriction
       (narrow-to-region start end)
       (goto-char (point-min))
+      (delete-trailing-whitespace)
       (flet ((split-this-line ()
                               (save-excursion
                                 (beginning-of-line)
@@ -315,6 +321,47 @@
   "Align a typical PHP assignment block (aligns along = and =>)"
   (interactive "r")
   (align-regexp beg end "\\(\\s-*\\)\\(=>\\|=\\)" 1 1 nil))
+
+(defun calc-update-embedded (&optional arg end obeg oend)
+  "Starts then immediately stops Calc Embedded mode to update a formula"
+  (interactive "P")
+  (require 'calc-ext)
+  (calc-do-embedded arg end obeg oend)
+  (calc-do-embedded arg end obeg oend))
+
+(defun re-search-overlap (regexp &optional noerror)
+  "Find the first match overlapping the current position"
+  (interactive "M")
+  (let ((eol (line-end-position))
+        (curpos (point))
+        found)
+    (goto-char (line-beginning-position))
+    (while (and (not found)
+                (re-search-forward regexp eol t))
+      (when (and (<= (match-beginning 0) curpos)
+               (>= (match-end 0) curpos))
+        (setq found t)))
+    (if found
+        found
+      (if noerror
+          nil
+        (error "Could not find %s overlapping current position" regexp)))))
+
+(defun informal-to-calc-format (&optional arg end obeg oend)
+  "Take /* math */ at point and convert it to /*$ math => 0 $*/"
+  (interactive "P")
+  (save-excursion
+    (when (not (re-search-overlap "/\\*.*?\\*/" t))
+      (error "Could not find /* math */"))
+    (save-restriction
+      (narrow-to-region (+ 2 (match-beginning 0)) (- (match-end 0) 2))
+      (replace-string "$" "" nil (point-min) (point-max)) ;; get rid of dollar signs like $5
+      (goto-char (point-min))
+      (insert "$")
+      (goto-char (point-max))
+      (insert " => 0 $")
+      (goto-char (- (point-max) 4)))
+    (calc-update-embedded)))
 
 ;; Steelhead specific configurations
 (when (file-exists-p "~/steelhead")

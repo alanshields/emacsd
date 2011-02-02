@@ -34,6 +34,7 @@
   ; Key bindings
   (local-set-key (kbd "C-c C-t") 'align-php-assign)
   (local-set-key (kbd "C-c C-a") 'align-table)
+  (local-set-key (kbd "C-c C-e") 'calc-update-embedded)
   )
 
 (add-hook 'php-mode-hook
