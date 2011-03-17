@@ -363,6 +363,14 @@
       (goto-char (- (point-max) 4)))
     (calc-update-embedded)))
 
+(defun flip-region (&optional start end)
+  (interactive "r")
+  (let* ((contents (buffer-substring start end))
+         (reversed (concat (reverse (string-to-list contents)))))
+    (delete-region start end)
+    (insert reversed)))
+
 ;; Steelhead specific configurations
 (when (file-exists-p "~/steelhead")
   (load "steelhead.el"))
+(put 'downcase-region 'disabled nil)
