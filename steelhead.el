@@ -3,6 +3,8 @@
   (interactive)
   ; Steelhead uses tabs, not spaces.
   (setq indent-tabs-mode t)
+  ; Fill to 80 columns, not 70 (for M-q)
+  (setq fill-column 80)
   ; Steelhead uses javadoc comments like so:
   ; /*
   ; * something here
@@ -17,6 +19,7 @@
                   (c . 0)
                   ; next-line function args
 ;                  (arglist-cont-nonempty . +)
+                  (case-label . +)
                   ))
                t)
                
@@ -27,10 +30,35 @@
   (setq c-electric-flag nil)
   ; Mumamo on
   ; (nxhtml-mumamo-mode)
+
+  ; Key bindings
+  (local-set-key (kbd "C-c C-t") 'align-php-assign)
+  (local-set-key (kbd "C-c C-a") 'align-table)
+  (local-set-key (kbd "C-c C-e") 'calc-update-embedded)
   )
 
 (add-hook 'php-mode-hook
           #'steelhead-php-style)
+
+;; They use Eclipse. Okay. We need to be compatible. Okay.
+(defun steelhead-java-style ()
+  (interactive)
+  ; Tabs, not spaces.
+  (setq indent-tabs-mode t)
+  ; Fill to 80 columns, not 70 (for M-q)
+  (setq fill-column 80)
+  ; Java style
+  (c-add-style "steelhead-java"
+               '("java"
+                 (c-offsets-alist
+                  (topmost-intro-cont . 0)))
+               t)
+  ; 4 characters per tab
+  (setq tab-width 4))
+
+(add-hook 'java-mode-hook
+          #'steelhead-java-style)
+
 
 (require 'remember)
 (org-remember-insinuate)
