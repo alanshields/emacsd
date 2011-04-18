@@ -33,10 +33,10 @@
 ;;    '(slime-setup '(slime-fancy slime-banner)))
 
 ;; Package-install
-(require 'package)
-(add-to-list 'package-archives
-             '("technomancy" . "http://repo.technomancy.us/emacs/") t)
-(package-initialize)
+;; (require 'package)
+;; (add-to-list 'package-archives
+;;              '("technomancy" . "http://repo.technomancy.us/emacs/") t)
+;; (package-initialize)
 
 ;; SGML stuff
 (setq sgml-set-face t)
