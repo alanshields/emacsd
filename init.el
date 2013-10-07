@@ -2,27 +2,29 @@
 
 (prefer-coding-system 'utf-8)
 
-;; To byte-compile .emacs.d, run this command:
-(defun my-byte-compile-initd ()
-  (byte-recompile-directory "~/.emacs.d" 0))
-
-(my-byte-compile-initd)
+(add-to-list 'load-path "~/.emacs.d")
 
 (dynamic-completion-mode)
 
 (if (boundp tool-bar-mode)
     (tool-bar-mode 0))
 
-(add-to-list 'load-path "~/.emacs.d")
+(require 'package)
+(add-to-list 'package-archives
+             '("marmalade" . "http://marmalade-repo.org/packages/"))
+(package-initialize)
 
-;; (setq auto-mode-alist
-;;       (append '(("\\.scm$" . bee-mode)
-;;                 ("\\.sch$" . bee-mode)
-;;                 ("\\.scme$" . bee-mode)
-;;                 ("\\.bgl$" . bee-mode)
-;;                 ("\\.bee$" . bee-mode))
-;;               auto-mode-alist))
+(defvar my-packages '(starter-kit
+                      starter-kit-lisp
+                      starter-kit-bindings
+                      starter-kit-eshell
+                      clojure-mode
+                      clojure-test-mode
+                      nrepl))
 
+(dolist (p my-packages)
+  (when (not (package-installed-p p))
+    (package-install p)))
 
 ;; Use Windows's meta-return for tag completion
 ;(byte-compile-file "~/fuzzy_complete.el" t)

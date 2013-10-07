@@ -2,3 +2,4 @@
 *.elc
 .org-id-locations
 completions
+/elpa
