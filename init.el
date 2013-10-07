@@ -26,10 +26,6 @@
   (when (not (package-installed-p p))
     (package-install p)))
 
-;; Use Windows's meta-return for tag completion
-;(byte-compile-file "~/fuzzy_complete.el" t)
-;(global-set-key (kbd "ESC RET") 'fuzzy-complete-tag)
-
 ;; ctrl-z goes to eshell, not shell. ctrl-x ctrl-z still goes to shell
 (global-set-key (kbd "C-z") 'eshell)
 
@@ -89,7 +85,7 @@
 
 ;; Org-Mode
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
-(setq org-export-with-LaTeX-fragments t)
+
 (add-hook 'org-mode-hook
           (lambda ()
             (when (not (featurep 'my-org-mode))
@@ -133,7 +129,6 @@
         (setq len (+ len 1))))
     len))
 
-(require 'cl)
 (defun align-table (start end)
   "Aligns text in the region in a table format split by ,"
   (interactive "r")
@@ -142,7 +137,7 @@
       (narrow-to-region start end)
       (goto-char (point-min))
       (delete-trailing-whitespace)
-      (flet ((split-this-line ()
+      (cl-flet ((split-this-line ()
                               (save-excursion
                                 (beginning-of-line)
                                 (split-string (buffer-substring-no-properties (point) (line-end-position)) "," nil)))
