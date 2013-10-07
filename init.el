@@ -1,11 +1,12 @@
-; the colors! My god, the colors!
-;(add-to-list 'default-frame-alist '(foreground-color . "white"))
-;(add-to-list 'default-frame-alist '(background-color . "black"))
-;(add-to-list 'default-frame-alist '(font . "-bitstream-bitstream vera sans mono-medium-r-normal--14-103-98-98-c-84-iso8859-1"))
+(setq visible-bell t)
+
+(prefer-coding-system 'utf-8)
 
 ;; To byte-compile .emacs.d, run this command:
 (defun my-byte-compile-initd ()
   (byte-recompile-directory "~/.emacs.d" 0))
+
+(my-byte-compile-initd)
 
 (dynamic-completion-mode)
 
@@ -13,8 +14,6 @@
     (tool-bar-mode 0))
 
 (add-to-list 'load-path "~/.emacs.d")
-;(add-to-list 'load-path "~/.emacs.d/emacs-rails")
-;(require 'rails)
 
 ;; SLIME
 ;; (let ((slime-dir "/opt/local/share/emacs/site-lisp/slime"))
@@ -135,6 +134,7 @@
   ;; Your init file should contain only one such instance.
   ;; If there is more than one, they won't work right.
  '(case-fold-search t)
+ '(coffee-tab-width 2)
  '(cperl-auto-newline nil)
  '(current-language-environment "Latin-1")
  '(default-input-method "latin-1-prefix")
@@ -183,12 +183,6 @@
        (let ((file (file-name-nondirectory buffer-file-name)))
           (concat "/Users/sshields/bin/jslint " file)))))
 
-;; TRAMP debug
-;; (require 'tramp)
-;; (setq tramp-verbose 6)
-;; (setq tramp-debug-buffer t)
-
-
 ;; Org-Mode
 (add-to-list 'auto-mode-alist '("\\.org$" . org-mode))
 (setq org-export-with-LaTeX-fragments t)
@@ -202,6 +196,9 @@
 (global-set-key "\C-cl" 'org-store-link)
 (global-set-key "\C-ca" 'org-agenda)
 (global-set-key "\C-cb" 'org-iswitchb)
+
+;; Puppet mode
+(load "puppet/puppet-mode-init.el")
 
 ;; PHP mode
 (load "nxhtml/autostart.el")
@@ -374,3 +371,18 @@
 (when (file-exists-p "~/steelhead")
   (load "steelhead.el"))
 (put 'downcase-region 'disabled nil)
+
+;; CoffeeScript
+(add-to-list 'load-path "~/.emacs.d/coffee-mode")
+(require 'coffee-mode)
+(add-to-list 'auto-mode-alist '("\\.coffee$" . coffee-mode))
+(add-to-list 'auto-mode-alist '("Cakefile" . coffee-mode))
+
+(defun coffee-custom ()
+  "coffee-mode-hook"
+ (set (make-local-variable 'tab-width) 2))
+
+(add-hook 'coffee-mode-hook
+  '(lambda() (coffee-custom)))
+
+(setq-default ispell-program-name "/usr/local/bin/aspell")
