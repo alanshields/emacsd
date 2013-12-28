@@ -18,6 +18,7 @@
                       starter-kit-lisp
                       starter-kit-bindings
                       starter-kit-eshell
+                      eldoc
                       clojure-mode
                       clojure-test-mode
                       nrepl))
@@ -26,8 +27,20 @@
   (when (not (package-installed-p p))
     (package-install p)))
 
+;; Disable auto-fill-mode
+(add-hook 'c-mode-hook
+      (lambda ()
+        (auto-fill-mode 0)))
+
 ;; ctrl-z goes to eshell, not shell. ctrl-x ctrl-z still goes to shell
 (global-set-key (kbd "C-z") 'eshell)
+
+;; Clojure customizations
+(add-hook 'nrepl-interaction-mode-hook
+          'nrepl-turn-on-eldoc-mode)
+(setq nrepl-hide-special-buffers t)
+(setq nrepl-popup-stacktraces nil)
+(setq nrepl-popup-stacktraces-in-repl t)
 
 
 (put 'narrow-to-page 'disabled nil)
@@ -44,10 +57,10 @@
              '(lambda () (define-key eshell-mode-map "\C-a" 'eshell-maybe-bol))))
 
 (custom-set-faces
-  ;; custom-set-faces was added by Custom.
-  ;; If you edit it by hand, you could mess it up, so be careful.
-  ;; Your init file should contain only one such instance.
-  ;; If there is more than one, they won't work right.
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
  '(default ((t (:inherit nil :stipple nil :background "White" :foreground "Black" :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 120 :width normal :foundry "apple" :family "Inconsolata"))))
  '(mmm-output-submode-face ((t (:background "FloralWhite" :foreground "forestgreen")))))
 
@@ -57,17 +70,18 @@
 
 (require 'uniquify)
 
+; '(exec-path (quote ("/usr/local/bin/" "/usr/texbin" "/usr/bin" "/bin" "/opt/local/bin" "/usr/sbin" "/sbin" "/Applications/Emacs.app/Contents/MacOS/bin")))
+
 (custom-set-variables
-  ;; custom-set-variables was added by Custom.
-  ;; If you edit it by hand, you could mess it up, so be careful.
-  ;; Your init file should contain only one such instance.
-  ;; If there is more than one, they won't work right.
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
  '(case-fold-search t)
  '(coffee-tab-width 2)
  '(cperl-auto-newline nil)
  '(current-language-environment "Latin-1")
  '(default-input-method "latin-1-prefix")
- '(exec-path (quote ("/usr/texbin" "/usr/bin" "/bin" "/opt/local/bin" "/usr/sbin" "/sbin" "/Applications/Emacs.app/Contents/MacOS/bin")))
  '(global-font-lock-mode t nil (font-lock))
  '(indent-tabs-mode nil)
  '(inhibit-startup-screen t)
@@ -80,6 +94,7 @@
  '(sentence-end-double-space nil)
  '(should-untabify nil)
  '(show-paren-mode t)
+ '(text-mode-hook (quote (turn-on-flyspell text-mode-hook-identify)))
  '(uniquify-buffer-name-style (quote post-forward) nil (uniquify)))
 
 
@@ -257,9 +272,21 @@
     (delete-region start end)
     (insert reversed)))
 
+(defun replace-smart-quotes (beg end)
+  "Replace 'smart quotes' in buffer or region with ascii quotes."
+  (interactive "r")
+  (format-replace-strings '(("\x201C" . "\"")
+                            ("\x201D" . "\"")
+                            ("\x2018" . "'")
+                            ("\x2019" . "'"))
+                          nil beg end))
+
 ;; Steelhead specific configurations
 (when (file-exists-p "~/steelhead")
   (load "steelhead.el"))
 (put 'downcase-region 'disabled nil)
 
 (setq-default ispell-program-name "/usr/local/bin/aspell")
+(add-hook 'c-mode-hook
+      (lambda ()
+        (auto-fill-mode 0)))
