@@ -27,6 +27,9 @@
   (when (not (package-installed-p p))
     (package-install p)))
 
+
+(require 'zoom-frm)
+
 ;; Disable auto-fill-mode
 (add-hook 'c-mode-hook
       (lambda ()
